@@ -5,29 +5,30 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 1 — the integration contract.** The notification,
-> context, filter, page, adapter and error types are implemented in
-> `@nickkupriyanov/inboxline-core`, next to the RFC 3339 timestamp check and the
-> boundary checks an adapter wraps its payloads in. Nothing runs a request yet:
-> the reducer, the derived view model, the controller and the React binding are
-> marked **Planned** and are not part of the available API.
+> **Current status: Iteration 2 — the state machine.** The notification, context,
+> filter, page, adapter and error types are implemented in
+> `@nickkupriyanov/inboxline-core`, next to the RFC 3339 timestamp check, the
+> boundary checks an adapter wraps its payloads in, and the pure reducer with its
+> initial state (`packages/core/src/reducer.ts`). Nothing runs a request yet: the
+> derived view model, the controller and the React binding are marked
+> **Planned** and are not part of the available API.
 
 ## 1. Packages and entry points
 
-| Entry point                                  | State                       | Content                                                                       |
-| -------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------- |
-| `@nickkupriyanov/inboxline-core`             | Contract only (Iteration 1) | Types, adapter contract, boundary checks, errors, context/filter, timestamps. |
-| `@nickkupriyanov/inboxline-core/dom`         | Not built yet               | Browser helpers (focus, size observation, available area) — Iteration 10.     |
-| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet               | Authored stylesheet — Iteration 11.                                           |
-| `@nickkupriyanov/inboxline-react`            | Empty placeholder           | Provider, hooks and layouts — Iteration 12 onwards.                           |
-| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet               | Copy of the core stylesheet — Iteration 11.                                   |
-| `@nickkupriyanov/inboxline-react/motion`     | Not built yet               | Optional Motion entry point — Iteration 17.                                   |
+| Entry point                                  | State                            | Content                                                                                    |
+| -------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------ |
+| `@nickkupriyanov/inboxline-core`             | Contract and state (Iteration 2) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer. |
+| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                    | Browser helpers (focus, size observation, available area) — Iteration 10.                  |
+| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                    | Authored stylesheet — Iteration 11.                                                        |
+| `@nickkupriyanov/inboxline-react`            | Empty placeholder                | Provider, hooks and layouts — Iteration 12 onwards.                                        |
+| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                    | Copy of the core stylesheet — Iteration 11.                                                |
+| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                    | Optional Motion entry point — Iteration 17.                                                |
 
-The core publishes values only from `./adapter`, `./context`, `./errors` and
-`./time`; `./types` and `./controller` are type-only modules. Modules that
-belong to later iterations — `reducer`, `derive`, `i18n`, `mock`, `dom`, the
-controller runtime and the `styles/` directory — do not exist yet, and
-`index.test.ts` fails when an undeclared runtime export appears.
+The core publishes values from `./adapter`, `./context`, `./errors`, `./reducer`
+and `./time`; `./types` and `./controller` are type-only modules. Modules that
+belong to later iterations — `derive`, `i18n`, `mock`, `dom`, the controller
+runtime and the `styles/` directory — do not exist yet, and `index.test.ts` fails
+when an undeclared runtime export appears.
 
 Rules that hold for every entry point:
 
@@ -60,6 +61,76 @@ public slot type.
 
 The reducer and the derivation step are pure functions: time and side effects
 are injected, never read from `Date.now()` or the network inside them.
+
+### The reducer and its state
+
+**Implemented in Iteration 2** (`packages/core/src/reducer.ts`). The reducer is
+the only place the model moves, and it is pure: `createInboxState()` builds the
+initial value, `inboxReducer(state, action)` applies one transition, and an
+action that changes nothing returns the very same object, so a snapshot can stay
+stable between real changes.
+
+`InboxState<TData>` keeps the confirmed server data, the status of each load and
+the optimistic layer apart from each other:
+
+| Field                                  | Type                                       | Meaning                                                                   |
+| -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------- |
+| `contextKey`                           | `string`                                   | The user/workspace the state belongs to.                                  |
+| `filter`                               | `InboxFilter`                              | The filter the loaded rows belong to. The counter ignores it.             |
+| `byId`                                 | `Record<string, InboxNotification<TData>>` | Confirmed notifications exactly as the adapter reported them.             |
+| `order`                                | `readonly string[]`                        | Their ids in the server's order, newest first, without duplicates.        |
+| `nextCursor`                           | `string \| null`                           | The cursor of the next page.                                              |
+| `listStatus` / `listError`             | `InboxLoadStatus` / `InboxError \| null`   | The first page: the initial load and every refresh.                       |
+| `pageStatus` / `pageError`             | `InboxPageStatus` / `InboxError \| null`   | Appending the next page.                                                  |
+| `unreadCount`                          | `number \| null`                           | The server counter; `null` means “not known yet”, never a confirmed zero. |
+| `countStatus` / `countError`           | `InboxLoadStatus` / `InboxError \| null`   | The counter load.                                                         |
+| `pending`                              | `InboxPendingState`                        | The optimistic layer, deliberately separate from `byId`.                  |
+| `listToken`, `pageToken`, `countToken` | `number`                                   | The generation each request was started with.                             |
+
+`InboxPendingState` is `{ reads, readOrder, bulk }`, where `reads` holds at most
+one `InboxPendingRead` per notification id and `readOrder` is the queue they were
+asked for in. One operation is `{ token, read, previousRead, status }`:
+`previousRead` is the confirmed state it started from, which is what a rollback
+and a correction of the displayed counter are based on. The three outcomes need
+no third field — a confirmed operation leaves no entry (the confirmed row shows),
+a rejected one leaves no entry either (only the optimistic value is retracted and
+the failure reaches `onError`), and an operation whose answer was lost stays with
+`status: 'unknown'` until the application reconciles. `bulk` is declared and its
+transitions arrive in Iteration 8.
+
+| Action                                         | Effect                                                                                                         |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `contextChanged(contextKey)`                   | A different user/workspace: rows, counter, paging, pending and generations all start over. The filter is kept. |
+| `setFilter(filter)`                            | Empties the rows and the paging, keeps the counter and the pending layer, supersedes the in-flight first page. |
+| `listLoading` / `listLoaded` / `listFailed`    | Loading, replacing the chain with a first page, or failing while keeping what is on screen.                    |
+| `pageLoading` / `pageLoaded` / `pageFailed`    | Appending a page; a failure keeps the rows and the cursor, so the same page can be retried.                    |
+| `countLoading` / `countLoaded` / `countFailed` | Loading the counter; a failure keeps the previous value, including `null`.                                     |
+| `readPending`                                  | Records one desired read state in the layer, without touching `byId` or `unreadCount`.                         |
+| `readConfirmed`                                | Writes the confirmed row (only if it is already loaded) and the server counter, and drops the operation.       |
+| `readFailed`                                   | Rolls back that operation only.                                                                                |
+| `readUnknown`                                  | Keeps the operation, marked `unknown`.                                                                         |
+
+Rules the transitions guarantee:
+
+1. **Server order, no duplicates.** A page is never sorted. Merging a page is
+   additive: the first occurrence of an id keeps both its place and its content,
+   so overlapping pages cannot reorder the list or rewind a row.
+2. **A refresh replaces the chain.** `listLoaded` installs the whole first page,
+   so rows that are no longer part of it are gone, together with the paging of
+   the previous chain.
+3. **Advancing cursors.** A `nextCursor` that did not advance is treated as the
+   end of the list, so paging cannot loop.
+4. **Closed generations.** A terminal action (`listLoaded`, `listFailed`,
+   `pageLoaded`, `pageFailed`, `countLoaded`, `countFailed`, `readConfirmed`,
+   `readFailed`, `readUnknown`) whose token no longer matches is dropped: an
+   answer to a superseded request, a filter the visitor left or a context that
+   was replaced cannot move the state.
+5. **The optimistic layer is separate.** `readPending` never writes `byId` and
+   never changes `unreadCount`; a refresh does not retract a request that is
+   still in flight; and a failure of one operation leaves every other operation
+   and the confirmed data untouched.
+6. **Confirmed data is not mutated.** The adapter's objects are stored, not
+   copied or rewritten, and the reducer never mutates its input.
 
 ### The action vocabulary
 
@@ -229,7 +300,8 @@ Iteration 8):
 
 ### Optimistic actions and unknown outcomes
 
-**Planned (Iterations 2 and 7).**
+**The layer is in place (Iteration 2, section 2); its semantics arrive in
+Iterations 7 and 8.**
 
 - Optimistic changes are a separate layer above confirmed data. A failure of one
   operation rolls back only that operation's layer; new notifications and other
@@ -408,7 +480,6 @@ them:
 - The precise cache key of the derived view model (Iteration 3).
 - Whether the mock adapter should generate a fixed data set or resolve data from
   a seed that a test can control (Iteration 4).
-- The exact shape of the snapshot beyond `{ revision, state, view }` (Iteration 2).
 - Whether preloading data for server rendering needs a serialisable seed beyond
   the controller contexts (Iteration 19).
 - How a backend that cannot report a `markAllRead` boundary should express it —
@@ -418,3 +489,9 @@ them:
 Resolved in Iteration 1: the success shape of `markAllRead` is
 `{ boundary, unreadCount }` and an unknown outcome is `InboxError` with
 `outcome: 'unknown'`, never an automatic retry.
+
+Resolved in Iteration 2: the snapshot stays `{ revision, state, view }` and the
+`state` half is `InboxState<TData>` as described in section 2 — confirmed rows and
+their server order, one status per load, the counter with its honest `null`, the
+optimistic layer and the request generations. The `view` half is fixed by the
+derived view model in Iteration 3.
