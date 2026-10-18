@@ -1,0 +1,71 @@
+{
+  "name": "@nickkupriyanov/inboxline-react",
+  "version": "0.0.0",
+  "description": "Themable, accessible React notification inbox: bell popover and feed layouts, a shared unread counter, cursor pagination and optimistic read state on top of @nickkupriyanov/inboxline-core.",
+  "keywords": [
+    "react",
+    "notifications",
+    "inbox",
+    "notification-center",
+    "bell",
+    "unread-count",
+    "headless",
+    "dark-theme"
+  ],
+  "license": "MIT",
+  "author": "Nick Kupriyanov",
+  "homepage": "https://github.com/nickkupriyanov/inboxline#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nickkupriyanov/inboxline.git",
+    "directory": "packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/nickkupriyanov/inboxline/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@nickkupriyanov/inboxline-core": "workspace:^"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0 || ^19.0.0",
+    "react-dom": "^18.2.0 || ^19.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "jsdom": "^30.1.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.4"
+  }
+}

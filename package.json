@@ -1,0 +1,25 @@
+{
+  "name": "inboxline-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Monorepo for Inboxline — a framework-free notification inbox core with a React binding",
+  "packageManager": "pnpm@9.8.0",
+  "engines": {
+    "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter @nickkupriyanov/inboxline-core build && pnpm --filter @nickkupriyanov/inboxline-react build",
+    "test": "pnpm -r test",
+    "test:watch": "pnpm --filter @nickkupriyanov/inboxline-react test:watch",
+    "typecheck": "pnpm -r typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,css,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,css,json,md}\"",
+    "changeset": "changeset",
+    "version-packages": "changeset version"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^3.0.3",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3"
+  }
+}

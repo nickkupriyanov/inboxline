@@ -1,0 +1,19 @@
+node_modules/
+dist/
+storybook-static/
+coverage/
+.DS_Store
+*.log
+*.tsbuildinfo
+.vite/
+.env
+.env.local
+
+# scratch / tooling artifacts
+.verify/
+.screenshots/
+.chrome-profile/
+*.tgz
+
+# pnpm store kept inside the workspace
+.pnpm-store/

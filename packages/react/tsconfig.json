@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["vitest/globals"],
+    "paths": {
+      "@nickkupriyanov/inboxline-react": ["./src/index.ts"],
+      "@nickkupriyanov/inboxline-core": ["../core/src/index.ts"]
+    }
+  },
+  "include": ["src", "*.config.ts"]
+}
