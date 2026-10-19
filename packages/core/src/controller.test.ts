@@ -16,6 +16,7 @@ import type {
   InboxMarkAllReadResult,
   InboxReadStatusQuery,
   InboxReadStatusResult,
+  InboxSubscriptionQuery,
 } from './adapter';
 import { DEFAULT_INBOX_CONTEXT } from './context';
 import { createInboxController } from './controller';
@@ -80,6 +81,19 @@ interface AdapterCalls {
   counts: InboxCountQuery[];
   reads: InboxReadStatusQuery[];
   marksAll: InboxMarkAllQuery[];
+  subscriptions: InboxSubscriptionQuery[];
+}
+
+/**
+ * One subscription the scripted adapter handed out.
+ *
+ * `active` becomes false when the controller calls the unsubscribe function, so
+ * a test can tell a released subscription from a live one and can replay a late
+ * event that a real transport might still deliver.
+ */
+interface ScriptedSubscription {
+  readonly query: InboxSubscriptionQuery;
+  active: boolean;
 }
 
 /**
@@ -89,20 +103,33 @@ interface AdapterCalls {
  * scripted promises stay pending after an abort on purpose, which is the harder
  * case — a real adapter may resolve late even when it was cancelled. Mutations
  * are deferred too, which is what makes the serial queue observable.
+ *
+ * `subscribe` is opt-in: the default adapter has no invalidation transport, and
+ * one that does records every query and offers `emitInvalidation()`.
  */
-function createScriptedAdapter(): {
+function createScriptedAdapter(options: { subscribe?: boolean } = {}): {
   adapter: InboxAdapter;
   calls: AdapterCalls;
   lists: Array<ReturnType<typeof deferred<InboxPage>>>;
   counts: Array<ReturnType<typeof deferred<InboxUnreadCount>>>;
   reads: Array<ReturnType<typeof deferred<InboxReadStatusResult>>>;
   marks: Array<ReturnType<typeof deferred<InboxMarkAllReadResult>>>;
+  subscriptions: ScriptedSubscription[];
+  emitInvalidation(): void;
+  activeSubscriptions(): number;
 } {
-  const calls: AdapterCalls = { lists: [], counts: [], reads: [], marksAll: [] };
+  const calls: AdapterCalls = {
+    lists: [],
+    counts: [],
+    reads: [],
+    marksAll: [],
+    subscriptions: [],
+  };
   const lists: Array<ReturnType<typeof deferred<InboxPage>>> = [];
   const counts: Array<ReturnType<typeof deferred<InboxUnreadCount>>> = [];
   const reads: Array<ReturnType<typeof deferred<InboxReadStatusResult>>> = [];
   const marks: Array<ReturnType<typeof deferred<InboxMarkAllReadResult>>> = [];
+  const subscriptions: ScriptedSubscription[] = [];
 
   const adapter: InboxAdapter = {
     getNotifications(query) {
@@ -131,7 +158,34 @@ function createScriptedAdapter(): {
     },
   };
 
-  return { adapter, calls, lists, counts, reads, marks };
+  if (options.subscribe) {
+    adapter.subscribe = (query) => {
+      const entry: ScriptedSubscription = { query, active: true };
+      calls.subscriptions.push(query);
+      subscriptions.push(entry);
+      return () => {
+        entry.active = false;
+      };
+    };
+  }
+
+  return {
+    adapter,
+    calls,
+    lists,
+    counts,
+    reads,
+    marks,
+    subscriptions,
+    emitInvalidation() {
+      for (const entry of [...subscriptions]) {
+        if (entry.active) entry.query.onInvalidate();
+      }
+    },
+    activeSubscriptions() {
+      return subscriptions.filter((entry) => entry.active).length;
+    },
+  };
 }
 
 describe('creation and snapshot', () => {
@@ -1717,6 +1771,362 @@ describe('the server-side “mark all read” operation', () => {
     expect(snapshot.state.order).toEqual(['fresh']);
     expect(snapshot.state.unreadCount).toBe(5);
     expect(snapshot.state.pending.bulk).toBeNull();
+  });
+});
+
+describe('external updates', () => {
+  it('opens one subscription in start, releases it in stop and ignores a late event', async () => {
+    const script = createScriptedAdapter({ subscribe: true });
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    expect(script.calls.subscriptions).toHaveLength(1);
+    expect(script.calls.subscriptions[0]?.context).toEqual(DEFAULT_INBOX_CONTEXT);
+
+    // A second start does not open a second subscription.
+    controller.start();
+    expect(script.calls.subscriptions).toHaveLength(1);
+
+    script.lists[0].resolve(page([note('a')]));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    const late = script.subscriptions[0]?.query.onInvalidate as () => void;
+
+    controller.stop();
+    expect(script.activeSubscriptions()).toBe(0);
+
+    // A transport can deliver one more event after the unsubscribe; it is ignored.
+    late();
+    expect(controller.getSnapshot().state.updatesAvailable).toBe(false);
+    expect(script.calls.counts).toHaveLength(1);
+
+    controller.start();
+    expect(script.calls.subscriptions).toHaveLength(2);
+    expect(script.activeSubscriptions()).toBe(1);
+  });
+
+  it('coalesces a burst, refreshes the counter and keeps the list until showUpdates', async () => {
+    const script = createScriptedAdapter({ subscribe: true });
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a', { read: true })]));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    script.emitInvalidation();
+    script.emitInvalidation();
+    script.emitInvalidation();
+
+    // The flag is raised at once; the counter read is coalesced into one request.
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.state.updatesAvailable).toBe(true);
+    expect(snapshot.view.updates).toEqual({ available: true, label: 'Show updates' });
+    expect(snapshot.view.actions.canShowUpdates).toBe(true);
+
+    await flush();
+    expect(script.calls.counts).toHaveLength(2);
+    script.counts[1].resolve({ unreadCount: 4 });
+    await flush();
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.unreadCount).toBe(4);
+    // The open list is exactly the one the visitor was reading.
+    expect(snapshot.state.order).toEqual(['a']);
+    expect(script.calls.lists).toHaveLength(1);
+
+    const showing = controller.actions.showUpdates();
+    expect(script.calls.lists).toHaveLength(2);
+    script.lists[1].resolve(page([note('b'), note('a', { read: true })]));
+    script.counts[2].resolve({ unreadCount: 3 });
+    await showing;
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['b', 'a']);
+    expect(snapshot.state.updatesAvailable).toBe(false);
+    expect(snapshot.view.updates.available).toBe(false);
+  });
+
+  it('does nothing on showUpdates when no update is pending', async () => {
+    const script = createScriptedAdapter({ subscribe: true });
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a')]));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    await controller.actions.showUpdates();
+    expect(script.calls.lists).toHaveLength(1);
+    expect(script.calls.counts).toHaveLength(1);
+  });
+
+  it('does not lose an event that arrives while the counter is being read', async () => {
+    const script = createScriptedAdapter({ subscribe: true });
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a')]));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    script.emitInvalidation();
+    await flush();
+    expect(script.calls.counts).toHaveLength(2);
+
+    // The second event arrives while the first read is in flight: the answer of
+    // that read cannot be trusted for it, so the controller asks again.
+    script.emitInvalidation();
+    script.counts[1].resolve({ unreadCount: 5 });
+    await flush();
+    expect(script.calls.counts).toHaveLength(3);
+
+    script.counts[2].resolve({ unreadCount: 6 });
+    await flush();
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.unreadCount).toBe(6);
+    expect(snapshot.state.updatesAvailable).toBe(true);
+  });
+
+  it('keeps the flag when an event arrives during the refresh it asked for', async () => {
+    const script = createScriptedAdapter({ subscribe: true });
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a')]));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    script.emitInvalidation();
+    await flush();
+
+    const showing = controller.actions.showUpdates();
+    expect(script.calls.lists).toHaveLength(2);
+
+    // The first page and the counter were requested before this event, so the
+    // new list is applied but the flag survives for a later acknowledgement.
+    script.emitInvalidation();
+    script.lists[1].resolve(page([note('b'), note('a')]));
+    script.counts[2].resolve({ unreadCount: 2 });
+    await showing;
+
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['b', 'a']);
+    expect(snapshot.state.updatesAvailable).toBe(true);
+    expect(snapshot.view.actions.canShowUpdates).toBe(true);
+
+    await flush();
+    expect(script.calls.counts).toHaveLength(4);
+    script.counts[3].resolve({ unreadCount: 3 });
+    await flush();
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.unreadCount).toBe(3);
+  });
+
+  it('reads the counter again when an event arrives during an individual mutation', async () => {
+    const script = createScriptedAdapter({ subscribe: true });
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a')]));
+    script.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    const reading = controller.actions.setRead('a', true);
+    script.emitInvalidation();
+    script.reads[0].resolve({ notification: { ...note('a'), read: true }, unreadCount: 1 });
+    await reading;
+    await flush();
+
+    // The mutation's counter may predate the external event, so it is not trusted
+    // as the answer for it.
+    expect(script.calls.counts.length).toBeGreaterThanOrEqual(2);
+    const lastCount = script.counts[script.counts.length - 1];
+    expect(script.calls.counts.length).toBe(3);
+    lastCount?.resolve({ unreadCount: 2 });
+    await flush();
+
+    expect(controller.getSnapshot().state.unreadCount).toBe(2);
+  });
+
+  it('contains a subscription failure and retries it on the next refresh', async () => {
+    const script = createScriptedAdapter();
+    let attempts = 0;
+    script.adapter.subscribe = () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('The socket is down');
+      return () => {};
+    };
+    const onError = vi.fn();
+    const controller = createInboxController({
+      adapter: script.adapter,
+      clock: clockAt(NOW),
+      callbacks: { onError },
+    });
+
+    controller.start();
+    expect(script.calls.lists).toHaveLength(1);
+    expect(script.calls.counts).toHaveLength(1);
+    expect(onError).toHaveBeenCalledTimes(1);
+    const failure = onError.mock.calls[0]?.[0];
+    expect(failure.code).toBe('ADAPTER_FAILURE');
+    expect(failure.phase).toBe('load');
+
+    script.lists[0].resolve(page([note('a')]));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    const reload = controller.actions.refresh();
+    expect(attempts).toBe(2);
+    script.lists[1].resolve(page([note('a')]));
+    script.counts[1].resolve({ unreadCount: 1 });
+    await reload;
+
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it('works without an invalidation transport and ignores the flag', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a')]));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    expect(script.calls.subscriptions).toHaveLength(0);
+    expect(controller.getSnapshot().state.updatesAvailable).toBe(false);
+  });
+
+  it('re-subscribes on a context change and ignores the old callback', async () => {
+    const script = createScriptedAdapter({ subscribe: true });
+    const controller = createInboxController({
+      adapter: script.adapter,
+      context: { key: 'user-1' },
+      clock: clockAt(NOW),
+    });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a')]));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    const old = script.subscriptions[0]?.query.onInvalidate as () => void;
+
+    controller.actions.setContext({ key: 'user-2' });
+    expect(script.calls.subscriptions).toHaveLength(2);
+    expect(script.calls.subscriptions[1]?.context.key).toBe('user-2');
+    expect(script.activeSubscriptions()).toBe(1);
+
+    // The released transport reports one more event; it belongs to the old scope.
+    old();
+    expect(script.calls.counts).toHaveLength(2);
+
+    script.lists[1].resolve(page([note('fresh')]));
+    script.counts[1].resolve({ unreadCount: 5 });
+    await flush();
+
+    expect(controller.getSnapshot().state.contextKey).toBe('user-2');
+    expect(controller.getSnapshot().state.order).toEqual(['fresh']);
+  });
+
+  it('re-subscribes when the adapter is replaced and ignores the old callback', async () => {
+    const first = createScriptedAdapter({ subscribe: true });
+    const second = createScriptedAdapter({ subscribe: true });
+    const controller = createInboxController({ adapter: first.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    first.lists[0].resolve(page([note('a')]));
+    first.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    const old = first.subscriptions[0]?.query.onInvalidate as () => void;
+
+    controller.actions.setAdapter(second.adapter);
+    expect(first.activeSubscriptions()).toBe(0);
+    expect(second.calls.subscriptions).toHaveLength(1);
+
+    old();
+    expect(second.calls.counts).toHaveLength(1);
+
+    second.lists[0].resolve(page([note('b')]));
+    second.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['b']);
+    expect(snapshot.state.unreadCount).toBe(2);
+  });
+
+  it('applies an event that arrives during the bulk operation with its refresh', async () => {
+    const script = createScriptedAdapter({ subscribe: true });
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a'), note('b')]));
+    script.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    const marking = controller.actions.markAllRead();
+    // Another client creates an event while the server-side operation runs.
+    script.emitInvalidation();
+    expect(controller.getSnapshot().state.updatesAvailable).toBe(true);
+
+    script.marks[0].resolve({ boundary: '2026-10-18T13:00:00Z', unreadCount: 1 });
+    await flush();
+
+    // The confirmed answer refreshes the first page, which was requested after
+    // the invalidation, so it shows the new event and clears the flag.
+    script.lists[1].resolve(
+      page([note('c'), note('a', { read: true }), note('b', { read: true })]),
+    );
+    script.counts[2].resolve({ unreadCount: 1 });
+    await marking;
+
+    const snapshot = controller.getSnapshot();
+    expect(script.calls.counts).toHaveLength(3);
+    expect(snapshot.state.order).toEqual(['c', 'a', 'b']);
+    expect(snapshot.state.unreadCount).toBe(1);
+    expect(snapshot.state.updatesAvailable).toBe(false);
+  });
+
+  it('keeps the readable list in place and applies new events from the mock', async () => {
+    const adapter = createMockAdapter({
+      clock: clockAt(NOW),
+      contexts: [
+        {
+          context: DEFAULT_INBOX_CONTEXT,
+          notifications: [note('a', { createdAt: '2026-10-18T12:00:00Z', read: true })],
+        },
+      ],
+    });
+    const controller = createInboxController({ adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    await flush();
+    expect(controller.getSnapshot().state.order).toEqual(['a']);
+
+    adapter.addNotification(
+      DEFAULT_INBOX_CONTEXT,
+      note('b', { createdAt: '2026-10-18T12:59:00Z' }),
+    );
+    adapter.invalidate(DEFAULT_INBOX_CONTEXT);
+    await flush();
+
+    // The counter follows the external change; the readable list does not move.
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.state.unreadCount).toBe(1);
+    expect(snapshot.state.order).toEqual(['a']);
+    expect(snapshot.state.updatesAvailable).toBe(true);
+
+    await controller.actions.showUpdates();
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['b', 'a']);
+    expect(snapshot.state.updatesAvailable).toBe(false);
   });
 });
 

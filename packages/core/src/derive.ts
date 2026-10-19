@@ -130,6 +130,21 @@ export interface InboxPageView {
 }
 
 /**
+ * External invalidations the adapter reported.
+ *
+ * `available` is raised when the data changed outside this controller — another
+ * client, a transport event, a server-side action — and the loaded list has not
+ * absorbed the change yet. The list itself is deliberately kept as it is;
+ * `label` is the text of the control that loads the new first page.
+ */
+export interface InboxUpdatesView {
+  /** An invalidation arrived and the open list is waiting for an explicit reload. */
+  available: boolean;
+  /** Label of the control that applies the updates, for example “Show updates”. */
+  label: string;
+}
+
+/**
  * What the visitor may do right now.
  *
  * `canMarkAllRead` is deliberately conservative: the bulk operation needs a
@@ -143,6 +158,8 @@ export interface InboxActionsView {
   canMarkAllRead: boolean;
   canRetryList: boolean;
   canRetryPage: boolean;
+  /** The “updates available” control can load the new first page. */
+  canShowUpdates: boolean;
   /** An individual mutation is queued or in flight, or a bulk operation runs. */
   busy: boolean;
 }
@@ -153,6 +170,7 @@ export interface InboxView<TData = unknown> {
   counter: InboxCounterView;
   list: InboxListView<TData>;
   page: InboxPageView;
+  updates: InboxUpdatesView;
   actions: InboxActionsView;
   /**
    * The polite announcement of the counter. It always describes the current
@@ -333,6 +351,10 @@ export function deriveInboxView<TData = unknown>(
       label: messages.loadMoreLabel,
       retryLabel: messages.retryLabel,
     },
+    updates: {
+      available: state.updatesAvailable,
+      label: messages.showUpdatesLabel,
+    },
     actions: {
       canRefresh: state.listStatus !== 'loading',
       canLoadMore: hasMore && listReady && state.pageStatus !== 'loading',
@@ -343,6 +365,7 @@ export function deriveInboxView<TData = unknown>(
         bulk === null,
       canRetryList: state.listStatus === 'error',
       canRetryPage: state.pageStatus === 'error',
+      canShowUpdates: state.updatesAvailable && state.listStatus !== 'loading',
       busy: state.pending.readOrder.length > 0 || bulk !== null,
     },
     live: { message: countLabel ?? messages.countUnknownLabel },

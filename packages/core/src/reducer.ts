@@ -160,6 +160,15 @@ export interface InboxState<TData = unknown> {
   countError: InboxError | null;
   /** The optimistic layer, deliberately separate from the confirmed rows. */
   pending: InboxPendingState;
+  /**
+   * An external change was reported and the loaded list has not absorbed it yet.
+   *
+   * The flag is raised by an invalidation from the adapter and cleared by the
+   * first page that was requested after the latest invalidation. Until then the
+   * open list stays exactly as it is, because new events must not shift a list
+   * the visitor is reading.
+   */
+  updatesAvailable: boolean;
   /** Generation of the first-page request. A stale answer is dropped. */
   listToken: number;
   /** Generation of the next-page request. */
@@ -200,6 +209,7 @@ export function createInboxState<TData = unknown>(
     countStatus: 'idle',
     countError: null,
     pending: { reads: {}, readOrder: [], bulk: null },
+    updatesAvailable: false,
     listToken: 0,
     pageToken: 0,
     countToken: 0,
@@ -225,8 +235,23 @@ export type InboxAction<TData = unknown> =
   | { type: 'contextChanged'; contextKey: string }
   /** A different filter: the rows and the paging go, the counter stays. */
   | { type: 'setFilter'; filter: InboxFilter }
+  /**
+   * The adapter reported that the context changed. The open list stays put and
+   * the flag invites the visitor to ask for the new first page explicitly.
+   */
+  | { type: 'externalUpdate' }
   | { type: 'listLoading'; token: number }
-  | { type: 'listLoaded'; token: number; page: InboxPage<TData> }
+  | {
+      type: 'listLoaded';
+      token: number;
+      page: InboxPage<TData>;
+      /**
+       * Whether the adapter reported another change after this request started.
+       * Omitted means “keep the flag as it was”, which keeps a hand-built action
+       * usable; the controller always states its answer.
+       */
+      updatesAvailable?: boolean;
+    }
   | { type: 'listFailed'; token: number; error: InboxError }
   | { type: 'pageLoading'; token: number }
   | { type: 'pageLoaded'; token: number; page: InboxPage<TData> }
@@ -377,6 +402,13 @@ export function inboxReducer<TData = unknown>(
   action: InboxAction<TData>,
 ): InboxState<TData> {
   switch (action.type) {
+    case 'externalUpdate': {
+      // One flag per burst: an invalidation that arrives while the previous one
+      // is still unacknowledged does not create a new snapshot.
+      if (state.updatesAvailable) return state;
+      return { ...state, updatesAvailable: true };
+    }
+
     case 'contextChanged': {
       if (action.contextKey === state.contextKey) return state;
       // A different user/workspace: the rows, the counter, the paging and the
@@ -428,6 +460,7 @@ export function inboxReducer<TData = unknown>(
         listError: null,
         pageStatus: 'idle',
         pageError: null,
+        updatesAvailable: action.updatesAvailable ?? state.updatesAvailable,
       };
     }
 

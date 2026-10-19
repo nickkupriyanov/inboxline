@@ -407,6 +407,36 @@ describe('action availability', () => {
   });
 });
 
+describe('external updates in the view', () => {
+  it('announces an update without changing the rows and exposes the label', () => {
+    const state = inboxReducer(counted(loaded([note('a'), note('b')]), 2), {
+      type: 'externalUpdate',
+    });
+    const view = deriveInboxView(state, CONFIG, ANCHOR);
+
+    expect(view.updates).toEqual({ available: true, label: 'Show updates' });
+    expect(view.actions.canShowUpdates).toBe(true);
+    expect(view.list.items.map((item) => item.id)).toEqual(['a', 'b']);
+  });
+
+  it('reports no update by default and uses the Russian label when one is pending', () => {
+    const state = counted(loaded([note('a')]), 1);
+    expect(deriveInboxView(state, CONFIG, ANCHOR).updates.available).toBe(false);
+
+    const shown = inboxReducer(state, { type: 'externalUpdate' });
+    expect(deriveInboxView(shown, RU, ANCHOR).updates.label).toBe('Показать обновления');
+  });
+
+  it('blocks the control while the first page is already loading', () => {
+    const shown = inboxReducer(loaded([]), { type: 'externalUpdate' });
+    const loading = inboxReducer(shown, { type: 'listLoading', token: 2 });
+    const view = deriveInboxView(loading, CONFIG, ANCHOR);
+
+    expect(view.updates.available).toBe(true);
+    expect(view.actions.canShowUpdates).toBe(false);
+  });
+});
+
 describe('memoisation', () => {
   it('returns the same view object for the same key', () => {
     const memo = createInboxViewMemo();

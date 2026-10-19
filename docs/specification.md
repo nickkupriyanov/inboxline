@@ -5,7 +5,7 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 8 — server-side “mark all read”.** The
+> **Current status: Iteration 9 — external updates and reconciliation.** The
 > notification, context, filter, page, adapter and error types are implemented in
 > `@nickkupriyanov/inboxline-core` (`packages/core/src/`), next to the RFC 3339
 > timestamp and calendar-day helpers, the boundary checks an adapter wraps its
@@ -13,28 +13,27 @@ work; this file owns the descriptions.
 > configuration with its `en`/`ru` copy and plural rules, the stable class slots,
 > the pure `deriveInboxView()` with its snapshot memo, `createMockAdapter()` with
 > its simulator controls, and `createInboxController()` with its lifecycle,
-> first-page, counter, filter, paging and mutation behaviour — including the
-> server-side bulk operation. Invalidation subscriptions still belong to
-> Iteration 9, and the React binding is marked **Planned** and is not part of the
+> first-page, counter, filter, paging, mutation and external-update behaviour —
+> including the server-side bulk operation and the optional invalidation
+> subscription. The React binding is marked **Planned** and is not part of the
 > available API.
 
 ## 1. Packages and entry points
 
-| Entry point                                  | State                                                    | Content                                                                                                                                                                                                                                                      |
-| -------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 8) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model, the deterministic mock adapter and the controller lifecycle, filters, paging and mutations. |
-| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                                            | Browser helpers (focus, size observation, available area) — Iteration 10.                                                                                                                                                                                    |
-| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                                            | Authored stylesheet — Iteration 11.                                                                                                                                                                                                                          |
-| `@nickkupriyanov/inboxline-react`            | Empty placeholder                                        | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                                                                                                          |
-| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                                            | Copy of the core stylesheet — Iteration 11.                                                                                                                                                                                                                  |
-| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                                                  |
+| Entry point                                  | State                                                    | Content                                                                                                                                                                                                                                                                              |
+| -------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 9) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model, the deterministic mock adapter and the controller lifecycle, filters, paging, mutations and external invalidations. |
+| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                                            | Browser helpers (focus, size observation, available area) — Iteration 10.                                                                                                                                                                                                            |
+| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                                            | Authored stylesheet — Iteration 11.                                                                                                                                                                                                                                                  |
+| `@nickkupriyanov/inboxline-react`            | Empty placeholder                                        | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                                                                                                                                  |
+| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                                            | Copy of the core stylesheet — Iteration 11.                                                                                                                                                                                                                                          |
+| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                                                                          |
 
 The core publishes values from `./adapter`, `./classNames`, `./config`,
 `./context`, `./controller`, `./derive`, `./errors`, `./i18n`, `./mock`,
 `./reducer` and `./time`; `./types` is a type-only module. Modules that belong to
-later iterations — `dom`, the invalidation subscription and the `styles/`
-directory — do not exist yet, and `index.test.ts` fails when an undeclared
-runtime export appears.
+later iterations — `dom` and the `styles/` directory — do not exist yet, and
+`index.test.ts` fails when an undeclared runtime export appears.
 
 Rules that hold for every entry point:
 
@@ -50,7 +49,7 @@ public slot type.
 
 ## 2. Controller and snapshot
 
-**Implemented in Iterations 5–8** (`packages/core/src/controller.ts`).
+**Implemented in Iterations 5–9** (`packages/core/src/controller.ts`).
 `createInboxController({ adapter, context?, filter?, config?, clock?, callbacks? })`
 owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
 (`start`/`stop`), `refreshTime()`, `updateConfig()` and `actions`.
@@ -124,7 +123,19 @@ owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
 - `setAdapter(adapter)` ignores the same reference. A different adapter abandons
   the queued mutations, retracts their optimistic layer and keeps the current
   rows on screen while loading a new first page and counter from the replacement
-  when the controller is started.
+  when the controller is started. Both a context change and an adapter
+  replacement release the invalidation subscription and open the new one.
+- **External updates.** When the adapter implements the optional `subscribe`, the
+  subscription is opened before the first request of a started controller and
+  released by `stop()`. An invalidation refreshes the counter and raises the
+  “updates available” flag without touching the open list, so new events never
+  shift a list the visitor is reading. `showUpdates()` acknowledges the flag and
+  loads the first page and the counter; a change that arrives while that load is
+  in flight keeps the flag for a later acknowledgement. A burst of events is
+  coalesced into one counter read, and an event that arrives during a request
+  makes that request stale instead of being lost. A failing `subscribe` is
+  reported through `onError` (phase `load`) and retried by the next `refresh()`;
+  the transport itself, including its reconnection, stays in the application.
 - `updateConfig(input)` resolves locale, time zone and message overrides and
   bumps the snapshot only when the resolved values actually differ. It never
   reloads server data.
@@ -135,8 +146,8 @@ owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
   contained: it neither rejects the action nor triggers a second request, and a
   cancelled request never reaches `onError`.
 - `actions` is the fixed vocabulary below. `refresh`, `retry`, `setFilter`,
-  `loadMore`, `setRead`, `markAllRead`, `reconcile`, `setContext` and
-  `setAdapter` are live.
+  `loadMore`, `setRead`, `markAllRead`, `showUpdates`, `reconcile`, `setContext`
+  and `setAdapter` are live.
 
 ```ts
 const inbox = createInboxController({
@@ -179,6 +190,7 @@ the optimistic layer apart from each other:
 | `unreadCount`                          | `number \| null`                           | The server counter; `null` means “not known yet”, never a confirmed zero. |
 | `countStatus` / `countError`           | `InboxLoadStatus` / `InboxError \| null`   | The counter load.                                                         |
 | `pending`                              | `InboxPendingState`                        | The optimistic layer, deliberately separate from `byId`.                  |
+| `updatesAvailable`                     | `boolean`                                  | An invalidation is waiting for an explicit reload of the first page.      |
 | `listToken`, `pageToken`, `countToken` | `number`                                   | The generation each request was started with.                             |
 
 `InboxPendingState` is `{ reads, readOrder, bulk }`, where `reads` holds at most
@@ -193,22 +205,23 @@ the failure reaches `onError`), and an operation whose answer was lost stays wit
 or `null`; it is one operation for the whole context, so it never appears in
 `readOrder`.
 
-| Action                                         | Effect                                                                                                          |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `contextChanged(contextKey)`                   | A different user/workspace: rows, counter, paging, pending and generations all start over. The filter is kept.  |
-| `setFilter(filter)`                            | Empties the rows and the paging, keeps the counter and the pending layer, supersedes the in-flight first page.  |
-| `listLoading` / `listLoaded` / `listFailed`    | Loading, replacing the chain with a first page, or failing while keeping what is on screen.                     |
-| `pageLoading` / `pageLoaded` / `pageFailed`    | Appending a page; a failure keeps the rows and the cursor, so the same page can be retried.                     |
-| `countLoading` / `countLoaded` / `countFailed` | Loading the counter; a failure keeps the previous value, including `null`.                                      |
-| `readPending`                                  | Records one desired read state in the layer, without touching `byId` or `unreadCount`.                          |
-| `readConfirmed`                                | Writes the confirmed row (only if it is already loaded) and the server counter, and drops the operation.        |
-| `readFailed`                                   | Rolls back that operation only.                                                                                 |
-| `readUnknown`                                  | Keeps the operation, marked `unknown`.                                                                          |
-| `bulkPending`                                  | Records the whole-context operation in `pending.bulk`, without touching the rows or the counter.                |
-| `bulkConfirmed`                                | Marks loaded rows at or before the server boundary read, installs the server counter and drops the layer.       |
-| `bulkFailed`                                   | Rolls back the bulk layer only.                                                                                 |
-| `bulkUnknown`                                  | Keeps the bulk layer as `unknown`.                                                                              |
-| `readsReconciled`                              | A fresh authoritative page and counter arrived: drops the operations marked `unknown`, leaves the pending ones. |
+| Action                                         | Effect                                                                                                                                                                          |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contextChanged(contextKey)`                   | A different user/workspace: rows, counter, paging, pending, the update flag and generations all start over. The filter is kept.                                                 |
+| `externalUpdate`                               | Raises `updatesAvailable` once per burst; the rows, the counter and the layer are untouched.                                                                                    |
+| `setFilter(filter)`                            | Empties the rows and the paging, keeps the counter and the pending layer, supersedes the in-flight first page.                                                                  |
+| `listLoading` / `listLoaded` / `listFailed`    | Loading, replacing the chain with a first page, or failing while keeping what is on screen. `listLoaded` also states whether an invalidation is still awaiting acknowledgement. |
+| `pageLoading` / `pageLoaded` / `pageFailed`    | Appending a page; a failure keeps the rows and the cursor, so the same page can be retried.                                                                                     |
+| `countLoading` / `countLoaded` / `countFailed` | Loading the counter; a failure keeps the previous value, including `null`.                                                                                                      |
+| `readPending`                                  | Records one desired read state in the layer, without touching `byId` or `unreadCount`.                                                                                          |
+| `readConfirmed`                                | Writes the confirmed row (only if it is already loaded) and the server counter, and drops the operation.                                                                        |
+| `readFailed`                                   | Rolls back that operation only.                                                                                                                                                 |
+| `readUnknown`                                  | Keeps the operation, marked `unknown`.                                                                                                                                          |
+| `bulkPending`                                  | Records the whole-context operation in `pending.bulk`, without touching the rows or the counter.                                                                                |
+| `bulkConfirmed`                                | Marks loaded rows at or before the server boundary read, installs the server counter and drops the layer.                                                                       |
+| `bulkFailed`                                   | Rolls back the bulk layer only.                                                                                                                                                 |
+| `bulkUnknown`                                  | Keeps the bulk layer as `unknown`.                                                                                                                                              |
+| `readsReconciled`                              | A fresh authoritative page and counter arrived: drops the operations marked `unknown`, leaves the pending ones.                                                                 |
 
 Rules the transitions guarantee:
 
@@ -238,7 +251,7 @@ Rules the transitions guarantee:
 
 ### The action vocabulary
 
-**Fixed in Iteration 1, runtime from Iterations 5–8**
+**Fixed in Iteration 1, runtime from Iterations 5–9**
 (`packages/core/src/controller.ts`). Every action that talks to the server
 resolves when the operation has settled, successfully or not, and never rejects:
 a failure is reported through `onError` and through the snapshot, so a binding
@@ -252,6 +265,7 @@ never needs a `.catch()` to keep a console clean.
 | `loadMore()`          | Appends the next page of the current filter and context; one request at a time, and a repeated cursor ends the list.            |
 | `setRead(id, read)`   | Sets a desired read state; the change is queued until the server confirms it. `read` is a state, not a toggle.                  |
 | `markAllRead()`       | Marks every notification of the context read on the server, including the ones never loaded; runs outside the individual queue. |
+| `showUpdates()`       | Applies an invalidation the adapter announced; does nothing when none is pending, otherwise it behaves like `refresh()`.        |
 | `reconcile()`         | Reads the server state again after an unknown outcome, without retrying the operation.                                          |
 | `setContext(context)` | Replaces the context; in-flight work of the previous one is abandoned.                                                          |
 | `setAdapter(adapter)` | Replaces the adapter; in-flight work of the previous one is abandoned.                                                          |
@@ -395,7 +409,8 @@ DOM and never calls an adapter, so a binding does not format a date a second tim
 | `counter`  | `unreadCount` (`null` while unknown), `known`, the plural `label`, the load `status`, `loading`, a localized `error`. |
 | `list`     | `status`, `loading`, `error`, `empty`, `emptyLabel`, `loadingLabel`, `label`, `count`, `items`, `groups`.             |
 | `page`     | `status`, `loading`, `error`, `hasMore`, `canLoadMore`, `label`, `retryLabel`.                                        |
-| `actions`  | `canRefresh`, `canLoadMore`, `canMarkAllRead`, `canRetryList`, `canRetryPage`, `busy`.                                |
+| `updates`  | `available` (an invalidation is waiting) and `label` (“Show updates”).                                                |
+| `actions`  | `canRefresh`, `canLoadMore`, `canMarkAllRead`, `canRetryList`, `canRetryPage`, `canShowUpdates`, `busy`.              |
 | `live`     | The polite announcement of the current counter.                                                                       |
 
 Rules the derivation guarantees:
@@ -422,7 +437,8 @@ Rules the derivation guarantees:
 4. **Action availability is conservative.** `canMarkAllRead` needs a known
    non-zero counter, no queued individual operation and no bulk operation in
    flight; `canLoadMore` needs a next cursor, a ready list and no page already
-   loading.
+   loading; `canShowUpdates` follows the invalidation flag and is false while the
+   first page is loading.
 5. **Time is injected.** Relative labels and the day groups come from the
    `InboxTimeAnchor`; nothing in the derivation calls `Date.now()`.
 6. **The view is memoized by revision.** `inboxViewKey(stateRevision,
@@ -680,16 +696,43 @@ Iteration 8.**
 
 ### External updates
 
-**Planned (Iteration 9).** An optional `subscribe` on the adapter reports that
-data was invalidated and returns an unsubscribe function (its signature is fixed
-in Iteration 1). WebSocket, SSE and SDK clients stay in the application; in v1 an
-event carries no mandatory delta and requires no shared server revision.
+**Implemented in Iteration 9** (`packages/core/src/controller.ts`,
+`packages/core/src/reducer.ts`, `packages/core/src/derive.ts`). An optional
+`subscribe` on the adapter reports that data was invalidated and returns an
+unsubscribe function; its signature was fixed in Iteration 1. WebSocket, SSE and
+SDK clients stay in the application, an event carries no mandatory delta, and v1
+requires no shared server revision.
 
-On invalidation the counter is refreshed and an “updates available” flag is
-raised. The open list is kept until the user refreshes it explicitly, because
-new events must not shift a list that is being read; reopening the bell
-reconciles the first page as well. Frequent invalidations are coalesced, and an
-invalidation that arrives during a request is not lost.
+- **The subscription follows the lifecycle.** `start()` opens it before the first
+  request, `stop()` releases it, and a context change or an adapter replacement
+  releases the old subscription and opens the one for the new scope. A callback
+  that a transport delivers after its subscription was released is ignored by the
+  subscription generation. A second `start()` does not open a second one.
+- **The counter is refreshed, the open list is kept.** An invalidation bumps the
+  generation, raises `state.updatesAvailable` and reads the counter again,
+  because the counter describes the whole context and has no list to protect. The
+  rows are left exactly as they are: new events must not shift a list the visitor
+  is reading.
+- **Bursts are coalesced.** A microtask schedules one counter read for any number
+  of events that arrive in the same turn. An event that arrives while a counter
+  read is in flight is not lost: that answer is treated as stale, and a fresh read
+  is sent after it settles. A failed invalidation-driven read is reported once and
+  not retried in a loop — the next event or an explicit `refresh()` tries again.
+- **An explicit acknowledgement applies the list.** `showUpdates()` does nothing
+  while no update is pending and otherwise loads the first page and the counter.
+  The flag is cleared by a first page that was requested after the latest
+  invalidation; an event that arrives while that page is being loaded keeps the
+  flag, so the next acknowledgement is the one that shows it. `refresh()` behaves
+  the same way. Reopening the panel is the binding's explicit refresh.
+- **The transport is the application's.** If `subscribe` throws or does not return
+  an unsubscribe function, the failure is reported through `onError` with phase
+  `load` and the controller keeps working without external updates; the next
+  `refresh()` retries the subscription. Reconnection, heartbeats and delivery
+  guarantees are not implemented by the library.
+- **An event does not resolve unknown mutations by itself.** A lost `setRead` or
+  `markAllRead` answer is still resolved by the refreshed first page and counter
+  that `reconcile()` performs; an invalidation only makes the counter and the list
+  flag move.
 
 ### Two payloads, one contract
 
@@ -897,3 +940,14 @@ zero. A confirmed answer is followed by a refreshed first page and counter; a
 refusal drops the layer; a lost answer stays `unknown`, is reconciled by that
 refresh and is never sent again automatically. A context change resets the layer
 and an adapter replacement retracts it.
+
+Resolved in Iteration 9: an invalidation is a signal, not a change. It refreshes
+the counter and raises `state.updatesAvailable`, but the open list is replaced
+only by an explicit `showUpdates()` or `refresh()`. The flag is cleared by a first
+page that was requested after the latest invalidation, so an event that arrives
+during the load keeps the flag instead of being silently swallowed. Invalidations
+are coalesced into one counter read, a counter request that started before the
+event is treated as stale rather than trusted, and a failed invalidation-driven
+read is surfaced once instead of being retried in a loop. A subscription failure
+is reported with phase `load` and retried by the next `refresh()`; transport
+reconnection stays the application's responsibility.

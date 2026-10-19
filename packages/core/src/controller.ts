@@ -31,6 +31,12 @@
  *   counter of 27 is a normal answer and either call may fail on its own. A
  *   confirmed read carries a newer counter, so it supersedes a counter request
  *   that was started earlier.
+ * - **External changes are signalled, not applied.** The optional `subscribe` of
+ *   the adapter is started by `start()` and released by `stop()`. An invalidation
+ *   refreshes the counter — which lives outside the list — raises an “updates
+ *   available” flag, and leaves the open list exactly as it is until the visitor
+ *   asks for it with `showUpdates()`. Events are coalesced, and one that arrives
+ *   while a request is in flight makes that request stale instead of being lost.
  * - **One chain at a time.** A first page (a start, a refresh, another filter or
  *   another context) supersedes the pages appended before it, and a page load
  *   supersedes the next one only after it has settled. Duplicate rows are folded
@@ -111,10 +117,11 @@ export interface InboxSnapshot<TData = unknown> {
  * through the snapshot, so a binding never has to attach a `.catch()` to keep a
  * console clean.
  *
- * Iterations 5 to 8 implement the lifecycle, paging, individual read actions
- * and the server-side bulk operation: `refresh()`, `retry()`, `setFilter()`,
- * `loadMore()`, `setRead()`, `markAllRead()` and `reconcile()`, together with
- * `setContext()` and `setAdapter()`.
+ * Iterations 5 to 9 implement the lifecycle, paging, individual read actions,
+ * the server-side bulk operation and external invalidations: `refresh()`,
+ * `retry()`, `setFilter()`, `loadMore()`, `setRead()`, `markAllRead()`,
+ * `showUpdates()` and `reconcile()`, together with `setContext()` and
+ * `setAdapter()`.
  *
  * @typeParam TData — Application data carried by every notification.
  * @typeParam TContextData — Application data carried by the context.
@@ -172,6 +179,16 @@ export interface InboxActions<TData = unknown, TContextData = unknown> {
    * Nothing happens while the counter is unknown or zero.
    */
   markAllRead(): Promise<void>;
+  /**
+   * Loads the first page and the counter that an invalidation announced.
+   *
+   * The open list is deliberately not replaced when the adapter reports a change,
+   * because new events must not shift a list the visitor is reading. This action
+   * is the explicit acknowledgement: it does nothing when no update is pending,
+   * and otherwise behaves like `refresh()`. A change that arrives while the load
+   * is in flight keeps the flag for a later acknowledgement.
+   */
+  showUpdates(): Promise<void>;
   /**
    * Reads the server state again after an unknown outcome, without retrying it.
    *
@@ -238,9 +255,17 @@ export interface InboxController<TData = unknown, TContextData = unknown> {
   getSnapshot(): InboxSnapshot<TData>;
   /** Registers a listener. The returned function removes exactly that listener. */
   subscribe(listener: () => void): () => void;
-  /** Starts the initial page and counter load. Idempotent. */
+  /**
+   * Starts the initial page and counter load and the optional invalidation
+   * subscription. Idempotent.
+   */
   start(): void;
-  /** Stops listening to the outside world and cancels pending loads. Idempotent. */
+  /**
+   * Stops listening to the outside world and cancels pending loads. Idempotent.
+   *
+   * The adapter's `subscribe` is released; the application keeps its own
+   * transport. A mutation that already reached the adapter is left to settle.
+   */
   stop(): void;
   /**
    * Re-reads the clock and notifies listeners when the rendered time changed.
@@ -263,6 +288,14 @@ export interface InboxController<TData = unknown, TContextData = unknown> {
 interface ActiveRequest {
   readonly token: number;
   readonly controller: AbortController;
+  /**
+   * The invalidation generation the request was started in.
+   *
+   * A request that started before the latest invalidation cannot describe the
+   * change that invalidation announced, so its answer is treated as stale: a
+   * first page keeps the “updates available” flag and a counter read asks again.
+   */
+  readonly invalidationRevision: number;
 }
 
 /**
@@ -408,6 +441,29 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
   /** Coalesces concurrent reconciliation attempts into one refresh. */
   let reconciliation: Promise<void> | null = null;
 
+  /** Releases the adapter's invalidation subscription, or `null` when none is held. */
+  let unsubscribeSubscription: (() => void) | null = null;
+  /**
+   * Identifies the subscription that is allowed to report.
+   *
+   * A transport event can arrive after `stop()`, a context change or an adapter
+   * replacement; the callback carries the generation it was created with, and a
+   * callback of an earlier generation is ignored.
+   */
+  let subscriptionRevision = 0;
+  /** Bumped by every invalidation; the value a request started in is stored with it. */
+  let invalidationRevision = 0;
+  /**
+   * The invalidation generation a counter request has already been attempted for.
+   *
+   * It is recorded when that request settles, successfully or not, so a failure
+   * of an invalidation-driven read is surfaced once instead of being retried in a
+   * loop; the next invalidation or an explicit `refresh()` tries again.
+   */
+  let lastCountAttemptRevision = 0;
+  /** Guards the coalesced counter read against a second, concurrent schedule. */
+  let countCheckScheduled = false;
+
   function notify(): void {
     for (const listener of [...listeners]) listener();
   }
@@ -463,6 +519,108 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     activePage = null;
   }
 
+  /* -- invalidation subscription -------------------------------------------- */
+
+  /**
+   * Releases the subscription the adapter gave us.
+   *
+   * Unsubscribing is the adapter's own cleanup, so a throw here is contained:
+   * it neither reaches `onError` nor stops the rest of the teardown. The
+   * generation is bumped first, so a callback of the released subscription is
+   * ignored even if the adapter keeps calling it.
+   */
+  function removeSubscription(): void {
+    subscriptionRevision += 1;
+    const unsubscribe = unsubscribeSubscription;
+    unsubscribeSubscription = null;
+    if (unsubscribe === null) return;
+    try {
+      unsubscribe();
+    } catch {
+      // The transport belongs to the application; its teardown is not a data
+      // failure and has nothing to report to the inbox.
+    }
+  }
+
+  /**
+   * Subscribes to the adapter when it supports invalidation.
+   *
+   * Called before every load, so a failure can be retried by a later `refresh()`
+   * and the initial page is requested after the subscription is in place and an
+   * event cannot slip through the gap. An adapter that throws or returns no
+   * unsubscribe function is reported through `onError` and leaves the controller
+   * working, just without external updates.
+   */
+  function ensureSubscription(): void {
+    if (!started || unsubscribeSubscription !== null) return;
+
+    const { subscribe } = adapter;
+    if (typeof subscribe !== 'function') return;
+
+    subscriptionRevision += 1;
+    const revision = subscriptionRevision;
+    let unsubscribe: (() => void) | null = null;
+    try {
+      unsubscribe = subscribe.call(adapter, {
+        context,
+        onInvalidate: () => handleInvalidation(revision),
+      });
+      if (typeof unsubscribe !== 'function') {
+        throw new InboxError({
+          code: 'ADAPTER_CONTRACT_VIOLATION',
+          phase: 'load',
+          message: 'Inboxline: adapter.subscribe must return an unsubscribe function',
+        });
+      }
+    } catch (error) {
+      // The inbox keeps working without external updates; the application can
+      // call `refresh()` later, which tries the subscription again.
+      reportError(toInboxError(error, 'ADAPTER_FAILURE', 'load'));
+      return;
+    }
+
+    unsubscribeSubscription = unsubscribe;
+  }
+
+  /** The adapter reported that this context's data changed. */
+  function handleInvalidation(revision: number): void {
+    if (!started || revision !== subscriptionRevision) return;
+
+    invalidationRevision += 1;
+    // The list stays exactly as it is: new events must not shift a list the
+    // visitor is reading. Only the flag changes, once per burst.
+    apply({ type: 'externalUpdate' });
+    // The counter describes the whole context and has no open list to protect,
+    // so it is read again right away.
+    ensureCounterCurrent();
+  }
+
+  /**
+   * Reads the counter again when the latest invalidation is not covered yet.
+   *
+   * Coalesced through a microtask, so a burst of events produces one request. A
+   * request that started before the invalidation is allowed to settle instead of
+   * being cancelled: its own completion calls back here, and only then is a
+   * fresh read sent. Nothing is scheduled while the controller is stopped, and a
+   * failed attempt is not repeated until the next invalidation or `refresh()`.
+   */
+  function ensureCounterCurrent(): void {
+    if (!started) return;
+    if (lastCountAttemptRevision >= invalidationRevision) return;
+    if (countCheckScheduled) return;
+
+    countCheckScheduled = true;
+    queueMicrotask(() => {
+      countCheckScheduled = false;
+      if (!started) return;
+      if (lastCountAttemptRevision >= invalidationRevision) return;
+      // A stale request is in flight: its completion will ask again, while a
+      // request that started after the invalidation reads the fresh value.
+      if (activeCount !== null) return;
+      void loadCount();
+    });
+  }
+
   /* -- snapshot ------------------------------------------------------------- */
 
   function anchorNow(): InboxTimeAnchor {
@@ -505,7 +663,14 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
       ) as InboxPage<TData>;
 
       if (activeList !== request) return false;
-      apply({ type: 'listLoaded', token: request.token, page });
+      apply({
+        type: 'listLoaded',
+        token: request.token,
+        page,
+        // A page that was requested before the latest invalidation cannot show
+        // the change it announced, so the “updates available” flag survives.
+        updatesAvailable: request.invalidationRevision !== invalidationRevision,
+      });
       return true;
     } catch (error) {
       // A cancelled or superseded request is not a failure: it never reaches
@@ -581,6 +746,10 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
       return false;
     } finally {
       if (activeCount === request) activeCount = null;
+      // The attempt is recorded even when it failed, so an invalidation-driven
+      // read is not retried in a loop; the next event or `refresh()` tries again.
+      lastCountAttemptRevision = Math.max(lastCountAttemptRevision, request.invalidationRevision);
+      ensureCounterCurrent();
     }
   }
 
@@ -597,6 +766,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     const request: ActiveRequest = {
       token: (nextToken += 1),
       controller: new AbortController(),
+      invalidationRevision,
     };
     activeList = request;
     apply({ type: 'listLoading', token: request.token });
@@ -616,6 +786,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     const request: ActiveRequest = {
       token: (nextToken += 1),
       controller: new AbortController(),
+      invalidationRevision,
     };
     activePage = request;
     requestedCursors.add(cursor);
@@ -632,6 +803,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     const request: ActiveRequest = {
       token: (nextToken += 1),
       controller: new AbortController(),
+      invalidationRevision,
     };
     activeCount = request;
     apply({ type: 'countLoading', token: request.token });
@@ -730,6 +902,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
    */
   async function runRead(operation: QueuedRead): Promise<void> {
     const revision = operation.sourceRevision;
+    const invalidationAtStart = invalidationRevision;
 
     try {
       const result = assertInboxReadStatusResult(
@@ -760,6 +933,12 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
         notification: result.notification,
         unreadCount: result.unreadCount,
       });
+      // The answer carries a counter, but only an operation that started after
+      // the latest invalidation describes that invalidation. Otherwise the
+      // change may postdate it and the counter is read again below.
+      if (invalidationAtStart === invalidationRevision) {
+        lastCountAttemptRevision = invalidationRevision;
+      }
     } catch (error) {
       if (revision !== sourceRevision) return;
 
@@ -778,6 +957,10 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
 
       apply({ type: 'readFailed', token: operation.token, id: operation.id });
       reportError(failure);
+    } finally {
+      // An event that arrived while the mutation was in flight makes its counter
+      // stale even when the server confirmed the change itself.
+      if (invalidationAtStart !== invalidationRevision) ensureCounterCurrent();
     }
   }
 
@@ -842,6 +1025,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
    * visitor never asked for.
    */
   async function runBulk(token: number, revision: number): Promise<void> {
+    const invalidationAtStart = invalidationRevision;
     try {
       const result = assertInboxMarkAllReadResult(await adapter.markAllRead({ context }));
 
@@ -873,6 +1057,10 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
 
       apply({ type: 'bulkFailed', token });
       reportError(failure);
+    } finally {
+      // An event that arrived while the operation ran was not part of its
+      // boundary and counter, so the counter is read again.
+      if (invalidationAtStart !== invalidationRevision) ensureCounterCurrent();
     }
   }
 
@@ -915,6 +1103,9 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
 
   async function refresh(): Promise<void> {
     if (!started) return;
+    // A subscription that failed to open is retried on every explicit reload, so
+    // an application can recover from a transport that was down at `start()`.
+    ensureSubscription();
     // The two calls answer different questions and may fail independently; the
     // action settles when both have, without rejecting either way.
     const revision = sourceRevision;
@@ -982,6 +1173,11 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
       await startBulk();
     },
 
+    async showUpdates() {
+      if (!started || !state.updatesAvailable) return;
+      await refresh();
+    },
+
     async reconcile() {
       await reconcileOperations();
     },
@@ -992,7 +1188,9 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
       if (isSameInboxContext(context, next)) {
         // The same user/workspace: `data` may carry a rotated token and has to be
         // used by the following requests, but the loaded rows, the counter and
-        // the cursors still belong to this context. Nothing is reloaded.
+        // the cursors still belong to this context. Nothing is reloaded, and the
+        // open subscription is left as it is: a transport that needs the new
+        // context data is replaced through `setAdapter()`.
         context = next;
         return;
       }
@@ -1004,6 +1202,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
       cancelLoads();
       sourceRevision += 1;
       abandonReads();
+      removeSubscription();
       context = next;
       apply({ type: 'contextChanged', contextKey: next.key });
 
@@ -1013,6 +1212,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     setAdapter(next) {
       if (next === adapter) return;
 
+      removeSubscription();
       adapter = next;
       // Everything the previous adapter was asked for belongs to a source that
       // no longer exists, including the operations still in the queue and a bulk
@@ -1061,12 +1261,15 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     start() {
       if (started) return;
       started = true;
+      // `refresh` opens the invalidation subscription before the first request,
+      // so an event that arrives during the initial load is not missed.
       void refresh();
     },
 
     stop() {
       if (!started) return;
       started = false;
+      removeSubscription();
       cancelLoads();
       // A mutation that has already reached the adapter cannot be cancelled
       // without turning a known answer into an unknown outcome: it is left to

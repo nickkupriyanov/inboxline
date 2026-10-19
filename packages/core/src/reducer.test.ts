@@ -69,6 +69,7 @@ describe('createInboxState', () => {
     expect(state.listStatus).toBe('idle');
     expect(state.pageStatus).toBe('idle');
     expect(state.pending).toEqual({ reads: {}, readOrder: [], bulk: null });
+    expect(state.updatesAvailable).toBe(false);
     expect(state.listToken).toBe(0);
     expect(state.pageToken).toBe(0);
     expect(state.countToken).toBe(0);
@@ -86,6 +87,64 @@ describe('createInboxState', () => {
 
     expect(state.contextKey).toBe('user-2');
     expect(state.filter).toBe('unread');
+  });
+});
+
+describe('external updates', () => {
+  it('raises the flag once and keeps the loaded rows', () => {
+    const loaded = loadedState();
+    const once = inboxReducer(loaded, { type: 'externalUpdate' });
+
+    expect(once.updatesAvailable).toBe(true);
+    expect(ids(once)).toEqual(['a', 'b', 'c']);
+    expect(once.listStatus).toBe('ready');
+    // A burst does not create a second snapshot.
+    expect(inboxReducer(once, { type: 'externalUpdate' })).toBe(once);
+  });
+
+  it('clears the flag with a first page that was requested after the change', () => {
+    const shown = inboxReducer(loadedState(), { type: 'externalUpdate' });
+    const loading = inboxReducer(shown, { type: 'listLoading', token: 2 });
+    const next = inboxReducer(loading, {
+      type: 'listLoaded',
+      token: 2,
+      page: pageOf([note('z')], null),
+      updatesAvailable: false,
+    });
+
+    expect(next.updatesAvailable).toBe(false);
+    expect(ids(next)).toEqual(['z']);
+  });
+
+  it('keeps the flag when the page was requested before the change', () => {
+    const loading = inboxReducer(loadedState(), { type: 'listLoading', token: 2 });
+    const next = inboxReducer(loading, {
+      type: 'listLoaded',
+      token: 2,
+      page: pageOf([note('z')], null),
+      updatesAvailable: true,
+    });
+
+    expect(next.updatesAvailable).toBe(true);
+  });
+
+  it('keeps the flag when an action does not state it', () => {
+    const shown = inboxReducer(loadedState(), { type: 'externalUpdate' });
+    const loading = inboxReducer(shown, { type: 'listLoading', token: 2 });
+    const next = inboxReducer(loading, {
+      type: 'listLoaded',
+      token: 2,
+      page: pageOf([note('z')], null),
+    });
+
+    expect(next.updatesAvailable).toBe(true);
+  });
+
+  it('resets the flag together with the context', () => {
+    const shown = inboxReducer(loadedState(), { type: 'externalUpdate' });
+    const next = inboxReducer(shown, { type: 'contextChanged', contextKey: 'user-2' });
+
+    expect(next.updatesAvailable).toBe(false);
   });
 });
 

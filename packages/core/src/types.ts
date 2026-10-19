@@ -271,6 +271,8 @@ export interface InboxMessages {
   retryLabel: string;
   /** Loads the next page. */
   loadMoreLabel: string;
+  /** Loads the first page after an external invalidation, for example “Show updates”. */
+  showUpdatesLabel: string;
   /** Marks every notification of the context read on the server. */
   markAllReadLabel: string;
   /** Day group of the current day. */
