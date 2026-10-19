@@ -49,7 +49,7 @@ public slot type.
 
 ## 2. Controller and snapshot
 
-**Implemented in Iterations 5–6** (`packages/core/src/controller.ts`).
+**Implemented in Iterations 5–7** (`packages/core/src/controller.ts`).
 `createInboxController({ adapter, context?, filter?, config?, clock?, callbacks? })`
 owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
 (`start`/`stop`), `refreshTime()`, `updateConfig()` and `actions`.
@@ -93,13 +93,28 @@ owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
 - A first page always supersedes the chain: `start`, `refresh`, `setFilter`, a
   context change and an adapter replacement abort an in-flight page load, and its
   late answer can neither append rows nor replace the new first page.
-- `setContext(context)` resets the rows, counter, paging and optimistic layer
-  when the key changes and starts a fresh load if the controller is started.
-  Replacing `context.data` under the same key only updates the object used by
-  the following requests — the data still belongs to the same scope.
-- `setAdapter(adapter)` ignores the same reference. A different adapter aborts
-  the in-flight work, keeps the current rows on screen and loads a new first
-  page and counter from the replacement when the controller is started.
+- `setRead(id, read)` sets the desired state of one loaded notification and
+  queues the change. The optimistic layer is recorded first, so the row and the
+  projected counter move immediately. Individual mutations are serialised: one
+  request at a time, in the order they were asked for. A repeated request for the
+  same id and an opposite one are both ignored while its operation is queued, in
+  flight or `unknown`, and a request for the state the row already has is not
+  sent. A confirmed answer installs the server notification and counter and
+  supersedes a counter load that was started earlier; a rejection rolls back that
+  operation only. An answer that does not state an outcome is kept as the visible
+  `unknown` state and starts a reconciliation instead of a retry.
+- `reconcile()` repeats that reconciliation when the automatic one failed: a
+  successful first page and counter are the confirmed server state and resolve
+  unknown rows. With nothing to reconcile it does nothing.
+- `setContext(context)` resets the rows, counter, paging, optimistic layer — and
+  the queued mutations — when the key changes, and starts a fresh load if the
+  controller is started. Replacing `context.data` under the same key only updates
+  the object used by the following requests — the data still belongs to the same
+  scope.
+- `setAdapter(adapter)` ignores the same reference. A different adapter abandons
+  the queued mutations, retracts their optimistic layer and keeps the current
+  rows on screen while loading a new first page and counter from the replacement
+  when the controller is started.
 - `updateConfig(input)` resolves locale, time zone and message overrides and
   bumps the snapshot only when the resolved values actually differ. It never
   reloads server data.
@@ -109,10 +124,9 @@ owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
   after the snapshot already holds them. An exception thrown by a callback is
   contained: it neither rejects the action nor triggers a second request, and a
   cancelled request never reaches `onError`.
-- `actions` is the fixed vocabulary below. In Iteration 6 `refresh`, `retry`,
-  `setFilter`, `loadMore`, `setContext` and `setAdapter` are live; `setRead`
-  remains a no-op until Iteration 7, `markAllRead` until Iteration 8 and
-  `reconcile` until the unknown-outcome work of Iterations 7–9.
+- `actions` is the fixed vocabulary below. `refresh`, `retry`, `setFilter`,
+  `loadMore`, `setRead`, `reconcile`, `setContext` and `setAdapter` are live;
+  `markAllRead` remains a no-op until Iteration 8.
 
 ```ts
 const inbox = createInboxController({
@@ -168,17 +182,18 @@ the failure reaches `onError`), and an operation whose answer was lost stays wit
 `status: 'unknown'` until the application reconciles. `bulk` is declared and its
 transitions arrive in Iteration 8.
 
-| Action                                         | Effect                                                                                                         |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `contextChanged(contextKey)`                   | A different user/workspace: rows, counter, paging, pending and generations all start over. The filter is kept. |
-| `setFilter(filter)`                            | Empties the rows and the paging, keeps the counter and the pending layer, supersedes the in-flight first page. |
-| `listLoading` / `listLoaded` / `listFailed`    | Loading, replacing the chain with a first page, or failing while keeping what is on screen.                    |
-| `pageLoading` / `pageLoaded` / `pageFailed`    | Appending a page; a failure keeps the rows and the cursor, so the same page can be retried.                    |
-| `countLoading` / `countLoaded` / `countFailed` | Loading the counter; a failure keeps the previous value, including `null`.                                     |
-| `readPending`                                  | Records one desired read state in the layer, without touching `byId` or `unreadCount`.                         |
-| `readConfirmed`                                | Writes the confirmed row (only if it is already loaded) and the server counter, and drops the operation.       |
-| `readFailed`                                   | Rolls back that operation only.                                                                                |
-| `readUnknown`                                  | Keeps the operation, marked `unknown`.                                                                         |
+| Action                                         | Effect                                                                                                          |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `contextChanged(contextKey)`                   | A different user/workspace: rows, counter, paging, pending and generations all start over. The filter is kept.  |
+| `setFilter(filter)`                            | Empties the rows and the paging, keeps the counter and the pending layer, supersedes the in-flight first page.  |
+| `listLoading` / `listLoaded` / `listFailed`    | Loading, replacing the chain with a first page, or failing while keeping what is on screen.                     |
+| `pageLoading` / `pageLoaded` / `pageFailed`    | Appending a page; a failure keeps the rows and the cursor, so the same page can be retried.                     |
+| `countLoading` / `countLoaded` / `countFailed` | Loading the counter; a failure keeps the previous value, including `null`.                                      |
+| `readPending`                                  | Records one desired read state in the layer, without touching `byId` or `unreadCount`.                          |
+| `readConfirmed`                                | Writes the confirmed row (only if it is already loaded) and the server counter, and drops the operation.        |
+| `readFailed`                                   | Rolls back that operation only.                                                                                 |
+| `readUnknown`                                  | Keeps the operation, marked `unknown`.                                                                          |
+| `readsReconciled`                              | A fresh authoritative page and counter arrived: drops the operations marked `unknown`, leaves the pending ones. |
 
 Rules the transitions guarantee:
 
@@ -204,12 +219,12 @@ Rules the transitions guarantee:
 
 ### The action vocabulary
 
-**Fixed in Iteration 1, runtime from Iteration 5** (`packages/core/src/controller.ts`).
-Every action that talks to the server resolves when the operation has settled,
-successfully or not, and never rejects: a failure is reported through `onError`
-and through the snapshot, so a binding never needs a `.catch()` to keep a console
-clean. The actions that belong to later iterations are present but deliberately
-inert until then (see the list above the action table).
+**Fixed in Iteration 1, runtime from Iterations 5–7**
+(`packages/core/src/controller.ts`). Every action that talks to the server
+resolves when the operation has settled, successfully or not, and never rejects:
+a failure is reported through `onError` and through the snapshot, so a binding
+never needs a `.catch()` to keep a console clean. `markAllRead` is present but
+deliberately inert until Iteration 8.
 
 | Action                | Meaning                                                                                                                 |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -259,6 +274,51 @@ controller and closed the races between a first page and an appended one.
   succeeds, then replaces the whole chain, including the old cursor. A failed
   refresh keeps both the rows and the cursor it was refreshing.
 
+### Individual read status
+
+**Implemented in Iteration 7** (`packages/core/src/controller.ts`,
+`packages/core/src/derive.ts`). `setRead(id, read)` is an explicit desired state,
+so two clients or a repeated click can never flip a row by accident.
+
+- **The layer is recorded before the request.** `readPending` writes the desired
+  state with the confirmed state it started from (`previousRead`) and touches
+  neither `byId` nor `unreadCount`. Only a loaded notification can be changed:
+  `previousRead` is what both the rollback and the counter projection are based
+  on. A different state for a row that is already `pending` or `unknown` is
+  ignored, and so is a request for the state the row already has.
+- **Mutations are serialised.** At most one `setReadStatus` is in flight; the
+  rest wait in `readOrder` and are sent one at a time.
+- **The counter is projected, not rewritten.** The derived view starts from the
+  confirmed server number and applies one step per _pending_ operation whose
+  `previousRead` differs from the desired `read`. The state keeps the server
+  value, and the projection never falls below zero. An operation marked `unknown`
+  is left out: it may already be part of the server number, and the
+  reconciliation is what decides.
+- **The server confirms.** A successful answer installs the notification exactly
+  as the server reported it and the server counter. That counter is newer than a
+  counter load that was already in flight, so the older request is aborted and a
+  late answer is dropped by the identity check.
+- **A refusal rolls back one operation.** `readFailed` removes only that layer
+  entry, so new notifications and other successful changes survive; the failure
+  reaches `onError` with `outcome: 'rejected'`.
+- **A lost answer is not a refusal.** Anything that does not state an outcome —
+  a thrown transport error, a timeout, a closed connection — becomes an
+  `InboxError` with `outcome: 'unknown'`. The operation stays visible as
+  `unknown`, `onError` receives that error, and the controller reconciles instead
+  of repeating the mutation. A successful refresh of the first page and the
+  counter applies `readsReconciled`, which resolves the unknown rows against the
+  confirmed data. A failed reconciliation keeps them for `reconcile()`.
+- **The unread filter is live.** A row whose effective state is read is not part
+  of the `unread` view, so it disappears as soon as the operation is queued and
+  comes back if it is rolled back. The row stays in `byId` and `order`: the
+  filter is a view of the loaded chain, not a second server query.
+- **Lifecycle.** A changed context or adapter abandons the queued operations and
+  retracts their layer; a request that already left is left to settle, and its
+  answer is dropped by the source generation. `stop()` drops the queued
+  operations the same way but lets an in-flight one finish, because cancelling it
+  after the server received it would create the unknown outcome the contract
+  tries to avoid.
+
 ### The derived view model
 
 **Implemented in Iteration 3** (`packages/core/src/derive.ts`,
@@ -288,11 +348,15 @@ Rules the derivation guarantees:
 2. **The optimistic layer shows.** A row's `read`/`unread` are the effective
    values — a queued operation wins over the confirmed one — and `pending`/
    `unknown` describe that operation. A rolled-back operation is simply absent
-   again, and the confirmed row shows through.
+   again, and the confirmed row shows through. In the `unread` filter a row whose
+   effective state is read is not rendered, so the selection stays honest while
+   the operation settles.
 3. **The counter is server data.** `unreadCount` stays `null` and `known` stays
    `false` until the server reports a number, and `label` stays `null` until then.
-   It is independent of the loaded page and of the filter: a page of ten rows
-   under a counter of 27 is a valid view.
+   Pending operations are projected onto that number, one step per row and based
+   on the confirmed state each started from; a lost answer is left out until it is
+   reconciled. The projection is independent of the loaded page and of the
+   filter: a page of ten rows under a counter of 27 is a valid view.
 4. **Action availability is conservative.** `canMarkAllRead` needs a known
    non-zero counter, no queued individual operation and no bulk operation in
    flight; `canLoadMore` needs a next cursor, a ready list and no page already
@@ -532,8 +596,8 @@ Iteration 8):
 
 ### Optimistic actions and unknown outcomes
 
-**The layer is in place (Iteration 2, section 2); its semantics arrive in
-Iterations 7 and 8.**
+**The individual actions are implemented in Iteration 7; the bulk operation
+arrives in Iteration 8.**
 
 - Optimistic changes are a separate layer above confirmed data. A failure of one
   operation rolls back only that operation's layer; new notifications and other
@@ -543,7 +607,8 @@ Iterations 7 and 8.**
   while that queue is busy.
 - A confirmed rejection is distinguished from an unknown outcome by
   `InboxError.outcome` (Iteration 1); an unknown outcome requires reconciliation
-  with the server and never triggers an automatic retry of the bulk operation.
+  with the server and never triggers an automatic retry of the mutation. A
+  successful first page and counter resolve the unknown rows.
 - “Mark all as read” runs on the server for the whole context and therefore
   covers notifications that were never loaded.
 
@@ -745,3 +810,14 @@ never let an answer of the previous scope match a new request. Replacing
 `context.data` under the same key updates future requests without resetting the
 data, and `getSnapshot()` reads the injected clock while `refreshTime()` is the
 explicit announcement that the rendered minute changed.
+
+Resolved in Iteration 7: an individual change is one operation per notification
+id while it is queued, in flight or waiting for reconciliation; a repeated or
+opposite click in that window is ignored, and a request for the state the row
+already has is not sent. The displayed counter is a projection of pending
+operations over the confirmed server number, and an `unknown` operation is left
+out of that projection until a refresh resolves it. A transport error that states
+no outcome is treated as `unknown`; only an adapter that says the change was
+rejected produces a rollback. The `unread` filter removes a row whose effective
+state became read, and a successful refresh of the first page and the counter —
+including the automatic one after a lost answer — resolves the unknown rows.

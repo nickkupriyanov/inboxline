@@ -243,7 +243,13 @@ export type InboxAction<TData = unknown> =
       unreadCount: number;
     }
   | { type: 'readFailed'; token: number; id: string }
-  | { type: 'readUnknown'; token: number; id: string };
+  | { type: 'readUnknown'; token: number; id: string }
+  /**
+   * A fresh authoritative page and counter have arrived, so the operations
+   * whose answers were lost no longer have to be guessed: their rows now show
+   * the server state. Queued and in-flight operations stay untouched.
+   */
+  | { type: 'readsReconciled' };
 
 /* -------------------------------------------------------------------------- */
 /*  Records                                                                   */
@@ -529,6 +535,28 @@ export function inboxReducer<TData = unknown>(
             ...operation,
             status: 'unknown',
           }),
+        },
+      };
+    }
+
+    case 'readsReconciled': {
+      const unknownIds = state.pending.readOrder.filter(
+        (id) => state.pending.reads[id]?.status === 'unknown',
+      );
+      if (unknownIds.length === 0) return state;
+
+      let reads = state.pending.reads;
+      for (const id of unknownIds) reads = withoutKey(reads, id);
+
+      return {
+        ...state,
+        pending: {
+          ...state.pending,
+          reads,
+          // Only lost answers are settled here: an operation that is still
+          // queued or in flight belongs to a request the controller has not
+          // finished, and its own outcome will remove or keep it.
+          readOrder: state.pending.readOrder.filter((id) => !unknownIds.includes(id)),
         },
       };
     }

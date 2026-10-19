@@ -12,7 +12,9 @@ import type {
   InboxAdapter,
   InboxCountQuery,
   InboxListQuery,
+  InboxMarkAllQuery,
   InboxMarkAllReadResult,
+  InboxReadStatusQuery,
   InboxReadStatusResult,
 } from './adapter';
 import { DEFAULT_INBOX_CONTEXT } from './context';
@@ -76,24 +78,31 @@ const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 
 interface AdapterCalls {
   lists: InboxListQuery[];
   counts: InboxCountQuery[];
+  reads: InboxReadStatusQuery[];
+  marksAll: InboxMarkAllQuery[];
 }
 
 /**
- * An adapter whose loads never settle until the test says so.
+ * An adapter whose requests never settle until the test says so.
  *
  * The request signal is honoured only by the controller's identity check: the
  * scripted promises stay pending after an abort on purpose, which is the harder
- * case — a real adapter may resolve late even when it was cancelled.
+ * case — a real adapter may resolve late even when it was cancelled. Mutations
+ * are deferred too, which is what makes the serial queue observable.
  */
 function createScriptedAdapter(): {
   adapter: InboxAdapter;
   calls: AdapterCalls;
   lists: Array<ReturnType<typeof deferred<InboxPage>>>;
   counts: Array<ReturnType<typeof deferred<InboxUnreadCount>>>;
+  reads: Array<ReturnType<typeof deferred<InboxReadStatusResult>>>;
+  marks: Array<ReturnType<typeof deferred<InboxMarkAllReadResult>>>;
 } {
-  const calls: AdapterCalls = { lists: [], counts: [] };
+  const calls: AdapterCalls = { lists: [], counts: [], reads: [], marksAll: [] };
   const lists: Array<ReturnType<typeof deferred<InboxPage>>> = [];
   const counts: Array<ReturnType<typeof deferred<InboxUnreadCount>>> = [];
+  const reads: Array<ReturnType<typeof deferred<InboxReadStatusResult>>> = [];
+  const marks: Array<ReturnType<typeof deferred<InboxMarkAllReadResult>>> = [];
 
   const adapter: InboxAdapter = {
     getNotifications(query) {
@@ -108,15 +117,21 @@ function createScriptedAdapter(): {
       counts.push(pending);
       return pending.promise;
     },
-    setReadStatus(): Promise<InboxReadStatusResult<unknown>> {
-      return Promise.reject(new Error('setReadStatus is not part of this scenario'));
+    setReadStatus(query) {
+      calls.reads.push(query);
+      const pending = deferred<InboxReadStatusResult>();
+      reads.push(pending);
+      return pending.promise;
     },
-    markAllRead(): Promise<InboxMarkAllReadResult> {
-      return Promise.reject(new Error('markAllRead is not part of this scenario'));
+    markAllRead(query) {
+      calls.marksAll.push(query);
+      const pending = deferred<InboxMarkAllReadResult>();
+      marks.push(pending);
+      return pending.promise;
     },
   };
 
-  return { adapter, calls, lists, counts };
+  return { adapter, calls, lists, counts, reads, marks };
 }
 
 describe('creation and snapshot', () => {
@@ -1016,6 +1031,362 @@ describe('filtering and paging', () => {
     expect(snapshot.state.pageStatus).toBe('idle');
     expect(snapshot.state.listStatus).toBe('ready');
     expect(snapshot.state.unreadCount).toBe(5);
+  });
+});
+
+describe('individual read operations', () => {
+  async function loadedController(
+    script: ReturnType<typeof createScriptedAdapter>,
+    options: {
+      filter?: InboxFilter;
+      notifications?: InboxNotification[];
+      unreadCount?: number;
+    } = {},
+  ) {
+    const controller = createInboxController({
+      adapter: script.adapter,
+      clock: clockAt(NOW),
+    });
+    if (options.filter !== undefined) controller.actions.setFilter(options.filter);
+    controller.start();
+    script.lists[0].resolve(page(options.notifications ?? [note('a'), note('b')]));
+    script.counts[0].resolve({ unreadCount: options.unreadCount ?? 2 });
+    await flush();
+    return controller;
+  }
+
+  it('shows the desired state and the projected counter before the server answers', async () => {
+    const script = createScriptedAdapter();
+    const controller = await loadedController(script);
+
+    const marking = controller.actions.setRead('a', true);
+
+    expect(script.calls.reads).toHaveLength(1);
+    expect(script.calls.reads[0]).toMatchObject({ id: 'a', read: true });
+    expect(script.calls.reads[0]?.context.key).toBe('default');
+
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.readOrder).toEqual(['a']);
+    expect(snapshot.view.list.items[0]?.read).toBe(true);
+    expect(snapshot.view.list.items[0]?.pending).toBe(true);
+    expect(snapshot.view.actions.busy).toBe(true);
+    // The state keeps the server number; the view projects the queued change.
+    expect(snapshot.state.unreadCount).toBe(2);
+    expect(snapshot.view.counter.unreadCount).toBe(1);
+
+    script.reads[0].resolve({
+      notification: { ...note('a'), read: true },
+      unreadCount: 1,
+    });
+    await marking;
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.readOrder).toEqual([]);
+    expect(snapshot.state.byId.a?.read).toBe(true);
+    expect(snapshot.state.unreadCount).toBe(1);
+    expect(snapshot.view.counter.unreadCount).toBe(1);
+    expect(snapshot.view.list.items[0]?.pending).toBe(false);
+    expect(snapshot.view.actions.busy).toBe(false);
+  });
+
+  it('sends one mutation at a time and keeps the queue order', async () => {
+    const script = createScriptedAdapter();
+    const controller = await loadedController(script);
+
+    const first = controller.actions.setRead('a', true);
+    const opposite = controller.actions.setRead('a', false);
+    const repeat = controller.actions.setRead('b', true);
+    const second = controller.actions.setRead('b', true);
+
+    // Only the first has left; the opposite click on `a` and the repeat of the
+    // desired state on `b` are ignored.
+    expect(script.calls.reads).toHaveLength(1);
+    expect(script.calls.reads[0]).toMatchObject({ id: 'a', read: true });
+    expect(script.calls.reads[0]?.context.key).toBe('default');
+
+    expect(controller.getSnapshot().state.pending.readOrder).toEqual(['a', 'b']);
+    expect(controller.getSnapshot().view.counter.unreadCount).toBe(0);
+
+    script.reads[0].resolve({ notification: { ...note('a'), read: true }, unreadCount: 1 });
+    await first;
+
+    // The second row is sent only after the first settled.
+    expect(script.calls.reads).toHaveLength(2);
+    expect(script.calls.reads[1]).toMatchObject({ id: 'b', read: true });
+    script.reads[1].resolve({ notification: { ...note('b'), read: true }, unreadCount: 0 });
+    await second;
+    await opposite;
+    await repeat;
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.readOrder).toEqual([]);
+    expect(snapshot.view.counter.unreadCount).toBe(0);
+    expect(snapshot.state.byId.a?.read).toBe(true);
+    expect(snapshot.state.byId.b?.read).toBe(true);
+  });
+
+  it('does not send a request for the state the notification already has', async () => {
+    const script = createScriptedAdapter();
+    const controller = await loadedController(script, {
+      notifications: [note('a', { read: true }), note('b')],
+      unreadCount: 1,
+    });
+
+    await controller.actions.setRead('a', true);
+    await controller.actions.setRead('b', false);
+    await controller.actions.setRead('missing', true);
+
+    expect(script.calls.reads).toHaveLength(0);
+  });
+
+  it('rolls back only the refused operation and keeps a newer event', async () => {
+    const onError = vi.fn();
+    const script = createScriptedAdapter();
+    const controller = createInboxController({
+      adapter: script.adapter,
+      clock: clockAt(NOW),
+      callbacks: { onError },
+    });
+    controller.start();
+    script.lists[0].resolve(page([note('a'), note('b')]));
+    script.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    const marking = controller.actions.setRead('a', true);
+    // A newer event arrives while the change is in flight. A refresh replaces
+    // the chain and the counter without touching the optimistic layer.
+    const refreshing = controller.actions.refresh();
+    script.lists[1].resolve(page([note('a'), note('b'), note('c')]));
+    script.counts[1].resolve({ unreadCount: 3 });
+    await refreshing;
+
+    expect(controller.getSnapshot().view.list.items.map((item) => item.id)).toEqual([
+      'a',
+      'b',
+      'c',
+    ]);
+
+    script.reads[0].reject(
+      new InboxError({ code: 'CONFLICT', phase: 'mutation', message: 'The row moved on' }),
+    );
+    await marking;
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.readOrder).toEqual([]);
+    expect(snapshot.state.byId.a?.read).toBe(false);
+    expect(snapshot.view.list.items.map((item) => item.id)).toEqual(['a', 'b', 'c']);
+    expect(snapshot.state.unreadCount).toBe(3);
+    expect(snapshot.view.counter.unreadCount).toBe(3);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]?.[0]?.outcome).toBe('rejected');
+  });
+
+  it('keeps a lost answer as unknown, reconciles and never repeats the mutation', async () => {
+    const onError = vi.fn();
+    const script = createScriptedAdapter();
+    const controller = createInboxController({
+      adapter: script.adapter,
+      clock: clockAt(NOW),
+      callbacks: { onError },
+    });
+    controller.start();
+    script.lists[0].resolve(page([note('a'), note('b')]));
+    script.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    const marking = controller.actions.setRead('a', true);
+    script.reads[0].reject(new Error('The connection dropped mid-flight'));
+    await flush();
+
+    // The transport error is not a refusal: the row stays in the unknown state
+    // and the controller asks the server for the confirmed data instead.
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.view.list.items[0]?.unknown).toBe(true);
+    expect(snapshot.view.list.items[0]?.read).toBe(true);
+    expect(snapshot.view.actions.busy).toBe(true);
+    expect(script.calls.reads).toHaveLength(1);
+    expect(script.calls.lists).toHaveLength(2);
+    expect(onError.mock.calls[0]?.[0]?.outcome).toBe('unknown');
+
+    script.lists[1].resolve(page([note('a', { read: true }), note('b')]));
+    script.counts[1].resolve({ unreadCount: 1 });
+    await marking;
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.readOrder).toEqual([]);
+    expect(snapshot.view.list.items[0]?.unknown).toBe(false);
+    expect(snapshot.view.list.items[0]?.read).toBe(true);
+    expect(snapshot.state.unreadCount).toBe(1);
+    expect(script.calls.reads).toHaveLength(1);
+  });
+
+  it('keeps the unknown state when the reconciliation fails and resolves it on a later one', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+    controller.start();
+    script.lists[0].resolve(page([note('a')]));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    const marking = controller.actions.setRead('a', true);
+    script.reads[0].reject(
+      new InboxError({
+        code: 'UNKNOWN',
+        phase: 'mutation',
+        outcome: 'unknown',
+        message: 'No answer',
+      }),
+    );
+    await flush();
+
+    script.lists[1].reject(new InboxError({ code: 'ADAPTER_FAILURE', message: 'Still down' }));
+    script.counts[1].reject(new InboxError({ code: 'ADAPTER_FAILURE', message: 'Still down' }));
+    await marking;
+
+    expect(controller.getSnapshot().view.list.items[0]?.unknown).toBe(true);
+
+    const reconciling = controller.actions.reconcile();
+    script.lists[2].resolve(page([note('a', { read: true })]));
+    script.counts[2].resolve({ unreadCount: 0 });
+    await reconciling;
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.readOrder).toEqual([]);
+    expect(snapshot.view.list.items[0]?.unknown).toBe(false);
+    expect(snapshot.view.list.items[0]?.read).toBe(true);
+    expect(snapshot.state.unreadCount).toBe(0);
+  });
+
+  it('drops a counter answer that the confirmed mutation supersedes', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+    controller.start();
+    script.lists[0].resolve(page([note('a'), note('b')]));
+    script.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    const refreshing = controller.actions.refresh();
+    const marking = controller.actions.setRead('a', true);
+
+    script.reads[0].resolve({ notification: { ...note('a'), read: true }, unreadCount: 1 });
+    await marking;
+
+    expect(script.calls.counts[1]?.signal.aborted).toBe(true);
+    expect(controller.getSnapshot().state.unreadCount).toBe(1);
+
+    // The older counter request answers late; the mutation result already told
+    // the state the newer truth.
+    script.counts[1].resolve({ unreadCount: 2 });
+    script.lists[1].resolve(page([note('a', { read: true }), note('b')]));
+    await refreshing;
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.unreadCount).toBe(1);
+    expect(snapshot.state.byId.a?.read).toBe(true);
+  });
+
+  it('abandons the mutation and the queue when the context changes', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({
+      adapter: script.adapter,
+      context: { key: 'user-1' },
+      clock: clockAt(NOW),
+    });
+    controller.start();
+    script.lists[0].resolve(page([note('a'), note('b')]));
+    script.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    const first = controller.actions.setRead('a', true);
+    const queued = controller.actions.setRead('b', true);
+    controller.actions.setContext({ key: 'user-2' });
+
+    // The queue is dropped with the previous context; only the request that
+    // already left exists, and its answer must not move the new state.
+    expect(script.calls.reads).toHaveLength(1);
+    await first;
+    await queued;
+
+    script.lists[1].resolve(page([note('fresh')]));
+    script.counts[1].resolve({ unreadCount: 5 });
+    await flush();
+
+    script.reads[0].resolve({ notification: { ...note('a'), read: true }, unreadCount: 0 });
+    await flush();
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.contextKey).toBe('user-2');
+    expect(snapshot.state.order).toEqual(['fresh']);
+    expect(snapshot.state.unreadCount).toBe(5);
+    expect(snapshot.state.pending.readOrder).toEqual([]);
+  });
+
+  it('removes a read row from the unread filter and brings it back on rollback', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+    controller.actions.setFilter('unread');
+    controller.start();
+    script.lists[0].resolve(page([note('a'), note('b')]));
+    script.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    expect(controller.getSnapshot().view.list.items.map((item) => item.id)).toEqual(['a', 'b']);
+
+    const marking = controller.actions.setRead('a', true);
+    expect(controller.getSnapshot().view.list.items.map((item) => item.id)).toEqual(['b']);
+    expect(controller.getSnapshot().view.counter.unreadCount).toBe(1);
+
+    script.reads[0].reject(
+      new InboxError({ code: 'ADAPTER_FAILURE', phase: 'mutation', message: 'Refused' }),
+    );
+    await marking;
+
+    expect(controller.getSnapshot().view.list.items.map((item) => item.id)).toEqual(['a', 'b']);
+    expect(controller.getSnapshot().view.counter.unreadCount).toBe(2);
+  });
+
+  it('uses the server row and counter as the confirmation, not the requested values', async () => {
+    const script = createScriptedAdapter();
+    const controller = await loadedController(script);
+
+    const marking = controller.actions.setRead('a', true);
+    script.reads[0].resolve({
+      notification: { ...note('a'), read: false, title: 'Changed elsewhere' },
+      unreadCount: 5,
+    });
+    await marking;
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.readOrder).toEqual([]);
+    expect(snapshot.view.list.items[0]?.read).toBe(false);
+    expect(snapshot.view.list.items[0]?.title).toBe('Changed elsewhere');
+    expect(snapshot.state.unreadCount).toBe(5);
+    expect(snapshot.view.counter.unreadCount).toBe(5);
+  });
+
+  it('reconciles a lost answer against a server that already applied it', async () => {
+    const clock = clockAt(NOW);
+    const onError = vi.fn();
+    const adapter = createMockAdapter({
+      clock,
+      contexts: [{ context: DEFAULT_INBOX_CONTEXT, notifications: [note('a'), note('b')] }],
+    });
+    const controller = createInboxController({ adapter, clock, callbacks: { onError } });
+
+    controller.start();
+    await flush();
+    expect(controller.getSnapshot().state.unreadCount).toBe(2);
+
+    adapter.failNext('setReadStatus', { apply: true, outcome: 'unknown' });
+    await controller.actions.setRead('a', true);
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.readOrder).toEqual([]);
+    expect(snapshot.state.byId.a?.read).toBe(true);
+    expect(snapshot.state.unreadCount).toBe(1);
+    expect(snapshot.view.list.items[0]?.unknown).toBe(false);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]?.[0]?.outcome).toBe('unknown');
   });
 });
 

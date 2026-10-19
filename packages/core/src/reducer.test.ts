@@ -613,6 +613,30 @@ describe('the optimistic layer', () => {
     expect(unknown).toBe(superseded);
   });
 
+  it('resolves only the operations whose answer was lost', () => {
+    const unknown = inboxReducer(withRead(), { type: 'readUnknown', token: 1, id: 'a' });
+    const both = inboxReducer(unknown, {
+      type: 'readPending',
+      token: 2,
+      id: 'c',
+      read: true,
+      previousRead: false,
+    });
+    const next = inboxReducer(both, { type: 'readsReconciled' });
+
+    expect(next.pending.reads.a).toBeUndefined();
+    expect(next.pending.readOrder).toEqual(['c']);
+    expect(next.pending.reads.c?.status).toBe('pending');
+    expect(next.byId.a.read).toBe(false);
+  });
+
+  it('keeps a pending operation when reconciliation runs', () => {
+    const state = withRead();
+    const next = inboxReducer(state, { type: 'readsReconciled' });
+
+    expect(next).toBe(state);
+  });
+
   it('survives a refresh, because a refresh does not retract a request', () => {
     const state = inboxReducer(withRead(), { type: 'listLoading', token: 2 });
     const refreshed = inboxReducer(state, {

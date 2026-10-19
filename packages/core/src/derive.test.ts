@@ -290,6 +290,43 @@ describe('the optimistic layer in the view', () => {
     expect(item?.pending).toBe(false);
   });
 
+  it('projects queued operations onto the displayed counter', () => {
+    const base = counted(loaded([note('a'), note('b'), note('c')]), 3);
+    const first = pendingRead(base, 'a', true);
+    const second = pendingRead(first, 'b', true);
+
+    expect(deriveInboxView(first, CONFIG, ANCHOR).counter.unreadCount).toBe(2);
+    expect(deriveInboxView(second, CONFIG, ANCHOR).counter.unreadCount).toBe(1);
+    // The confirmed number in the state is untouched by the projection.
+    expect(second.unreadCount).toBe(3);
+  });
+
+  it('never projects a lost answer, which the reconciliation resolves', () => {
+    const base = counted(loaded([note('a')]), 1);
+    const pending = pendingRead(base, 'a', true);
+    const unknown = inboxReducer(pending, { type: 'readUnknown', token: 2, id: 'a' });
+
+    const view = deriveInboxView(unknown, CONFIG, ANCHOR);
+    expect(view.list.items[0]?.unknown).toBe(true);
+    expect(view.counter.unreadCount).toBe(1);
+  });
+
+  it('turns an unread request into a live selection', () => {
+    const base = counted(loaded([note('a'), note('b')], { filter: 'unread' }), 2);
+    const pending = pendingRead(base, 'a', true);
+    const view = deriveInboxView(pending, CONFIG, ANCHOR);
+
+    expect(view.list.items.map((item) => item.id)).toEqual(['b']);
+    expect(view.list.count).toBe(1);
+    expect(view.counter.unreadCount).toBe(1);
+
+    const rolledBack = inboxReducer(pending, { type: 'readFailed', token: 2, id: 'a' });
+    expect(deriveInboxView(rolledBack, CONFIG, ANCHOR).list.items.map((item) => item.id)).toEqual([
+      'a',
+      'b',
+    ]);
+  });
+
   it('marks an operation whose answer was lost as unknown', () => {
     const pending = pendingRead(loaded([note('a')]), 'a', true);
     const unknown = inboxReducer(pending, { type: 'readUnknown', token: 2, id: 'a' });

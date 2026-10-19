@@ -194,6 +194,30 @@ function pendingOperationOf<TData>(
 }
 
 /**
+ * The counter a binding shows while operations are queued.
+ *
+ * The confirmed server number stays the baseline and is never rewritten by
+ * arithmetic in the state. The visible number projects the *pending* operations
+ * onto it, one step per row: an operation that started from a known unread row
+ * and asks for read removes one, and the reverse adds one. An operation whose
+ * answer was lost is deliberately left out: it may already be part of the last
+ * server number, and the reconciliation that follows is what resolves it.
+ */
+function effectiveUnreadCountOf<TData>(state: InboxState<TData>): number | null {
+  if (state.unreadCount === null) return null;
+
+  let projected = state.unreadCount;
+  for (const id of state.pending.readOrder) {
+    if (!Object.hasOwn(state.pending.reads, id)) continue;
+    const operation = state.pending.reads[id];
+    if (operation === undefined || operation.status !== 'pending') continue;
+    if (operation.previousRead === operation.read) continue;
+    projected += operation.read ? -1 : 1;
+  }
+  return Math.max(0, projected);
+}
+
+/**
  * Turns the state, the configuration and the time reference into the model a
  * binding renders.
  *
@@ -219,6 +243,11 @@ export function deriveInboxView<TData = unknown>(
     const operation = pendingOperationOf(state, id);
     const read = operation ? operation.read : notification.read;
     const unread = !read;
+    // The unread view is a live selection, not a snapshot of the request: a row
+    // that becomes read — optimistically or after confirmation — leaves the
+    // list immediately, and comes back if the operation is rolled back.
+    if (state.filter === 'unread' && read) continue;
+
     const dayKey = dayKeyOfInstant(notification.createdAt, timeZone);
     const timeLabel = formatInboxItemTime(notification.createdAt, locale, timeZone, time, messages);
 
@@ -252,7 +281,7 @@ export function deriveInboxView<TData = unknown>(
   }
 
   const listReady = state.listStatus === 'ready';
-  const unreadCount = state.unreadCount;
+  const unreadCount = effectiveUnreadCountOf(state);
   const countLabel = unreadCount === null ? null : counterLabelOf(unreadCount, config);
   const hasMore = state.nextCursor !== null;
   const bulk = state.pending.bulk;
