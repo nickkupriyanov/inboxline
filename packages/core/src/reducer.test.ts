@@ -650,6 +650,107 @@ describe('the optimistic layer', () => {
   });
 });
 
+describe('the bulk “mark all read” operation', () => {
+  /** A counted state whose rows have different creation times. */
+  function timedState(): InboxState {
+    const loading = inboxReducer(createInboxState(), { type: 'listLoading', token: 1 });
+    const loaded = inboxReducer(loading, {
+      type: 'listLoaded',
+      token: 1,
+      page: pageOf(
+        [
+          note('early', { createdAt: '2026-10-18T08:00:00Z' }),
+          note('edge', { createdAt: '2026-10-18T09:00:00Z' }),
+          note('late', { createdAt: '2026-10-18T10:00:00Z' }),
+          note('already', { createdAt: '2026-10-18T07:00:00Z', read: true }),
+        ],
+        null,
+      ),
+    });
+    return counted(loaded, 3);
+  }
+
+  it('records the request without touching the confirmed rows or the counter', () => {
+    const state = timedState();
+    const next = inboxReducer(state, { type: 'bulkPending', token: 7 });
+
+    expect(next.pending.bulk).toEqual({ token: 7, status: 'pending' });
+    expect(next.byId).toBe(state.byId);
+    expect(next.unreadCount).toBe(3);
+    expect(next.pending.reads).toEqual({});
+  });
+
+  it('applies the server boundary to loaded rows and installs its counter', () => {
+    const state = inboxReducer(timedState(), { type: 'bulkPending', token: 7 });
+    const next = inboxReducer(state, {
+      type: 'bulkConfirmed',
+      token: 7,
+      boundary: '2026-10-18T09:00:00Z',
+      unreadCount: 4,
+    });
+
+    // Everything at or before the boundary is read, including the row that was
+    // already read; the event after it keeps the server's unread state.
+    expect(next.byId.early?.read).toBe(true);
+    expect(next.byId.edge?.read).toBe(true);
+    expect(next.byId.late?.read).toBe(false);
+    expect(next.byId.already?.read).toBe(true);
+    // The result's counter is not necessarily zero: the late event is included.
+    expect(next.unreadCount).toBe(4);
+    expect(next.countStatus).toBe('ready');
+    expect(next.pending.bulk).toBeNull();
+  });
+
+  it('keeps the rows and the counter when the server refuses', () => {
+    const state = inboxReducer(timedState(), { type: 'bulkPending', token: 7 });
+    const next = inboxReducer(state, { type: 'bulkFailed', token: 7 });
+
+    expect(next.pending.bulk).toBeNull();
+    expect(next.byId).toBe(state.byId);
+    expect(next.unreadCount).toBe(3);
+  });
+
+  it('keeps a lost answer visible until reconciliation, then drops it', () => {
+    const state = inboxReducer(timedState(), { type: 'bulkPending', token: 7 });
+    const unknown = inboxReducer(state, { type: 'bulkUnknown', token: 7 });
+    expect(unknown.pending.bulk).toEqual({ token: 7, status: 'unknown' });
+
+    const reconciled = inboxReducer(unknown, { type: 'readsReconciled' });
+    expect(reconciled.pending.bulk).toBeNull();
+    expect(reconciled.byId).toBe(unknown.byId);
+  });
+
+  it('never reconciles a bulk operation that is still running', () => {
+    const state = inboxReducer(timedState(), { type: 'bulkPending', token: 7 });
+    expect(inboxReducer(state, { type: 'readsReconciled' })).toBe(state);
+  });
+
+  it('ignores an answer of a superseded bulk operation', () => {
+    const state = inboxReducer(timedState(), { type: 'bulkPending', token: 7 });
+
+    expect(
+      inboxReducer(state, {
+        type: 'bulkConfirmed',
+        token: 6,
+        boundary: '2026-10-18T09:00:00Z',
+        unreadCount: 0,
+      }),
+    ).toBe(state);
+    expect(inboxReducer(state, { type: 'bulkFailed', token: 6 })).toBe(state);
+    expect(inboxReducer(state, { type: 'bulkUnknown', token: 6 })).toBe(state);
+  });
+
+  it('belongs to the context, not to the filter, and survives a filter change', () => {
+    const state = inboxReducer(timedState(), { type: 'bulkPending', token: 7 });
+    const filtered = inboxReducer(state, { type: 'setFilter', filter: 'unread' });
+
+    expect(filtered.pending.bulk).toEqual({ token: 7, status: 'pending' });
+
+    const changed = inboxReducer(filtered, { type: 'contextChanged', contextKey: 'user-2' });
+    expect(changed.pending.bulk).toBeNull();
+  });
+});
+
 describe('the reducer itself', () => {
   it('never mutates the page or the notifications it is given', () => {
     const items = [note('a'), note('b')];

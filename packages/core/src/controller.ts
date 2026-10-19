@@ -20,6 +20,12 @@
  *   the request goes out, so a row shows the desired state immediately, and a
  *   confirmed rejection retracts exactly that row. A lost answer keeps the row
  *   in the `unknown` state and triggers a reconciliation instead of a retry.
+ * - **The bulk operation runs alone.** `markAllRead` is refused while the
+ *   individual queue is busy and refuses individual changes while it runs. Its
+ *   optimistic layer projects every loaded row as read and the counter as zero;
+ *   the confirmed answer installs the server's boundary and counter, and a
+ *   refreshed first page settles the events the boundary left unread. A lost
+ *   answer stays unknown and is reconciled, never repeated.
  * - **The list and the counter are independent.** They load in parallel, fail
  *   separately and keep their own statuses, because a page of ten rows under a
  *   counter of 27 is a normal answer and either call may fail on its own. A
@@ -41,7 +47,12 @@
  * (`filter`/`defaultFilter`/`onFilterChange`). They reach the core through these
  * actions, which keeps one source of truth: the server data in the controller.
  */
-import { assertInboxPage, assertInboxReadStatusResult, assertInboxUnreadCount } from './adapter';
+import {
+  assertInboxMarkAllReadResult,
+  assertInboxPage,
+  assertInboxReadStatusResult,
+  assertInboxUnreadCount,
+} from './adapter';
 import type { InboxAdapter, InboxReadStatusResult } from './adapter';
 import { resolveInboxConfig } from './config';
 import type { InboxConfig, InboxConfigInput } from './config';
@@ -100,10 +111,10 @@ export interface InboxSnapshot<TData = unknown> {
  * through the snapshot, so a binding never has to attach a `.catch()` to keep a
  * console clean.
  *
- * Iterations 5 to 7 implement the lifecycle, paging and individual read
- * actions: `refresh()`, `retry()`, `setFilter()`, `loadMore()`, `setRead()` and
- * `reconcile()`, together with `setContext()` and `setAdapter()`. `markAllRead`
- * is still a no-op until Iteration 8.
+ * Iterations 5 to 8 implement the lifecycle, paging, individual read actions
+ * and the server-side bulk operation: `refresh()`, `retry()`, `setFilter()`,
+ * `loadMore()`, `setRead()`, `markAllRead()` and `reconcile()`, together with
+ * `setContext()` and `setAdapter()`.
  *
  * @typeParam TData — Application data carried by every notification.
  * @typeParam TContextData — Application data carried by the context.
@@ -149,7 +160,16 @@ export interface InboxActions<TData = unknown, TContextData = unknown> {
   setRead(id: string, read: boolean): Promise<void>;
   /**
    * Marks every notification of the context read on the server, including the
-   * ones that were never loaded. Refused while individual mutations are queued.
+   * ones that were never loaded.
+   *
+   * The operation runs on its own, never inside the queue of individual
+   * changes: it is refused while that queue is busy, and individual changes are
+   * refused while it runs. Its layer projects the known rows as read and the
+   * counter as zero; the server's boundary then decides which loaded rows are
+   * confirmed read, and a refreshed first page brings in the events created
+   * after that boundary. A refused request rolls the layer back. A lost answer
+   * stays `unknown` and is reconciled, never sent again automatically.
+   * Nothing happens while the counter is unknown or zero.
    */
   markAllRead(): Promise<void>;
   /**
@@ -622,7 +642,8 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
 
   /* -- individual read operations ------------------------------------------- */
 
-  function hasUnknownReads(): boolean {
+  function hasUnknownOperations(): boolean {
+    if (state.pending.bulk?.status === 'unknown') return true;
     return state.pending.readOrder.some((id) => state.pending.reads[id]?.status === 'unknown');
   }
 
@@ -751,7 +772,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
       if (failure.outcome === 'unknown') {
         apply({ type: 'readUnknown', token: operation.token, id: operation.id });
         reportError(failure);
-        await reconcileReads();
+        await reconcileOperations();
         return;
       }
 
@@ -762,6 +783,9 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
 
   function enqueueRead(id: string, read: boolean): Promise<void> {
     if (!started) return Promise.resolve();
+    // The bulk operation owns the whole context while it runs: an individual
+    // change would race with its boundary and with its projected counter.
+    if (state.pending.bulk !== null) return Promise.resolve();
     if (!Object.hasOwn(state.byId, id)) return Promise.resolve();
 
     const confirmed = state.byId[id];
@@ -798,15 +822,88 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     return settled;
   }
 
+  /* -- the bulk operation --------------------------------------------------- */
+
+  /** Retracts the optimistic layer of an abandoned bulk operation. */
+  function abandonBulk(): void {
+    const bulk = state.pending.bulk;
+    if (bulk === null) return;
+    apply({ type: 'bulkFailed', token: bulk.token });
+  }
+
+  /**
+   * Marks the whole context read on the server and settles its layer.
+   *
+   * The confirmed boundary is the only honest way to tell which loaded rows the
+   * operation covered, and the refreshed first page and counter are what bring
+   * in the events created after it. A refused operation drops the layer; an
+   * answer that states no outcome keeps it `unknown` and reconciles instead of
+   * calling `markAllRead` again, because a repeat would apply a new boundary the
+   * visitor never asked for.
+   */
+  async function runBulk(token: number, revision: number): Promise<void> {
+    try {
+      const result = assertInboxMarkAllReadResult(await adapter.markAllRead({ context }));
+
+      if (revision !== sourceRevision) return;
+      if (state.pending.bulk?.token !== token) return;
+
+      apply({
+        type: 'bulkConfirmed',
+        token,
+        boundary: result.boundary,
+        unreadCount: result.unreadCount,
+      });
+      // The counter and the boundary already describe the confirmed change; a
+      // fresh first page is what shows the events created after the boundary
+      // and the rows that the operation covered without loading them first.
+      await refresh();
+    } catch (error) {
+      if (revision !== sourceRevision) return;
+      if (state.pending.bulk?.token !== token) return;
+
+      const failure = isInboxError(error) ? error : createUnknownOutcomeError(error);
+
+      if (failure.outcome === 'unknown') {
+        apply({ type: 'bulkUnknown', token });
+        reportError(failure);
+        await reconcileOperations();
+        return;
+      }
+
+      apply({ type: 'bulkFailed', token });
+      reportError(failure);
+    }
+  }
+
+  function startBulk(): Promise<void> {
+    if (!started) return Promise.resolve();
+    // One bulk operation at a time. Individual changes own the queue: the bulk
+    // action is refused until it has fully settled, exactly as the derived view
+    // disables its button.
+    if (state.pending.bulk !== null) return Promise.resolve();
+    if (state.pending.readOrder.length > 0) return Promise.resolve();
+    if (unreadCountIsZeroOrUnknown()) return Promise.resolve();
+
+    const token = (nextToken += 1);
+    apply({ type: 'bulkPending', token });
+    return runBulk(token, sourceRevision);
+  }
+
+  function unreadCountIsZeroOrUnknown(): boolean {
+    return state.unreadCount === null || state.unreadCount === 0;
+  }
+
   /**
    * Reconciles operations whose answer was lost.
    *
    * It never repeats the mutation: a successful refresh of the first page and
-   * the counter is what resolves the unknown rows, because those two answers are
-   * the confirmed server state. Concurrent attempts share one refresh.
+   * the counter is what resolves the unknown rows and the unknown bulk boundary,
+   * because those two answers are the confirmed server state. Concurrent
+   * attempts share one refresh.
    */
-  function reconcileReads(): Promise<void> {
-    if (!started || !hasUnknownReads()) return Promise.resolve();
+  function reconcileOperations(): Promise<void> {
+    if (!started || !hasUnknownOperations()) return Promise.resolve();
     if (reconciliation !== null) return reconciliation;
 
     const request = refresh().finally(() => {
@@ -882,11 +979,11 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     },
 
     async markAllRead() {
-      // Iteration 8 owns the bulk operation.
+      await startBulk();
     },
 
     async reconcile() {
-      await reconcileReads();
+      await reconcileOperations();
     },
 
     setContext(next) {
@@ -918,9 +1015,11 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
 
       adapter = next;
       // Everything the previous adapter was asked for belongs to a source that
-      // no longer exists, including the operations still in the queue.
+      // no longer exists, including the operations still in the queue and a bulk
+      // operation whose answer has not arrived.
       sourceRevision += 1;
       abandonReads();
+      abandonBulk();
       if (!started) return;
 
       // The list it already produced stays on screen until the new first page

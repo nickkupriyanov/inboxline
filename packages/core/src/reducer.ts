@@ -87,11 +87,16 @@ export interface InboxPendingRead {
 /**
  * The bulk “mark all read” operation.
  *
- * Its transitions arrive in Iteration 8: the operation runs outside the queue of
- * individual changes, influences rows that were never loaded, and reconciles
- * against the boundary the server reports.
+ * It runs outside the queue of individual changes, so it has its own generation
+ * and its own entry in the layer. Until the server answers, every loaded row is
+ * shown as read and the displayed counter is projected to zero: the request
+ * covers the whole context, including the rows that were never loaded. The
+ * confirmed answer replaces that guess with the server's boundary and counter,
+ * which is what keeps an event created after the boundary unread.
  */
 export interface InboxPendingBulk {
+  /** The generation of the `markAllRead` request that carries this operation. */
+  token: number;
   /** `pending` while the operation runs; `unknown` when its answer was lost. */
   status: InboxPendingReadStatus;
 }
@@ -244,6 +249,15 @@ export type InboxAction<TData = unknown> =
     }
   | { type: 'readFailed'; token: number; id: string }
   | { type: 'readUnknown'; token: number; id: string }
+  | { type: 'bulkPending'; token: number }
+  /**
+   * The server applied “mark all read” at `boundary`. Loaded rows created at or
+   * before it become read, rows created after it keep their confirmed state, and
+   * the server counter is installed as is — it is not necessarily zero.
+   */
+  | { type: 'bulkConfirmed'; token: number; boundary: string; unreadCount: number }
+  | { type: 'bulkFailed'; token: number }
+  | { type: 'bulkUnknown'; token: number }
   /**
    * A fresh authoritative page and counter have arrived, so the operations
    * whose answers were lost no longer have to be guessed: their rows now show
@@ -317,6 +331,34 @@ function indexPage<TData>(page: InboxPage<TData>): {
 /** Removes the id from the queue of pending operations, keeping the order. */
 function withoutQueuedId(readOrder: readonly string[], id: string): readonly string[] {
   return readOrder.filter((queued) => queued !== id);
+}
+
+/**
+ * The confirmed rows after a successful `markAllRead`.
+ *
+ * The server reports the moment it applied the operation, not the ids it
+ * touched: every notification created at or before that boundary is read and
+ * everything created after it keeps the state the server gave. Only the rows
+ * this state already holds are rewritten, and only the ones that actually
+ * change, so an already-read row keeps the very object the adapter produced.
+ */
+function rowsReadAtBoundary<TData>(
+  state: InboxState<TData>,
+  boundary: string,
+): Readonly<Record<string, InboxNotification<TData>>> {
+  const boundaryMs = Date.parse(boundary);
+  let byId: Record<string, InboxNotification<TData>> | null = null;
+
+  for (const id of state.order) {
+    const current = (byId ?? state.byId)[id];
+    if (current === undefined || current.read) continue;
+    if (Date.parse(current.createdAt) > boundaryMs) continue;
+
+    byId ??= { ...state.byId };
+    defineKey(byId, id, { ...current, read: true });
+  }
+
+  return byId ?? state.byId;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -543,7 +585,9 @@ export function inboxReducer<TData = unknown>(
       const unknownIds = state.pending.readOrder.filter(
         (id) => state.pending.reads[id]?.status === 'unknown',
       );
-      if (unknownIds.length === 0) return state;
+      const bulk = state.pending.bulk;
+      const dropBulk = bulk?.status === 'unknown';
+      if (unknownIds.length === 0 && !dropBulk) return state;
 
       let reads = state.pending.reads;
       for (const id of unknownIds) reads = withoutKey(reads, id);
@@ -557,6 +601,62 @@ export function inboxReducer<TData = unknown>(
           // queued or in flight belongs to a request the controller has not
           // finished, and its own outcome will remove or keep it.
           readOrder: state.pending.readOrder.filter((id) => !unknownIds.includes(id)),
+          bulk: dropBulk ? null : bulk,
+        },
+      };
+    }
+
+    case 'bulkPending':
+      return {
+        ...state,
+        // The bulk operation is the whole layer for its duration. It never
+        // writes a row or the counter: the derivation projects it, and dropping
+        // the entry is the complete rollback.
+        pending: {
+          ...state.pending,
+          bulk: { token: action.token, status: 'pending' },
+        },
+      };
+
+    case 'bulkConfirmed': {
+      if (state.pending.bulk?.token !== action.token) return state;
+
+      return {
+        ...state,
+        byId: rowsReadAtBoundary(state, action.boundary),
+        unreadCount: action.unreadCount,
+        countStatus: 'ready',
+        countError: null,
+        pending: {
+          ...state.pending,
+          bulk: null,
+        },
+      };
+    }
+
+    case 'bulkFailed': {
+      if (state.pending.bulk?.token !== action.token) return state;
+      // A confirmed refusal retracts the whole optimistic layer; the confirmed
+      // rows and the server counter were never touched.
+      return {
+        ...state,
+        pending: {
+          ...state.pending,
+          bulk: null,
+        },
+      };
+    }
+
+    case 'bulkUnknown': {
+      const bulk = state.pending.bulk;
+      if (bulk?.token !== action.token) return state;
+      // The operation may have happened: the layer stays visible until a
+      // refreshed first page and counter reconcile it.
+      return {
+        ...state,
+        pending: {
+          ...state.pending,
+          bulk: { ...bulk, status: 'unknown' },
         },
       };
     }

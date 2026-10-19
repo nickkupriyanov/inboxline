@@ -5,7 +5,7 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 6 — filters and controller paging.** The
+> **Current status: Iteration 8 — server-side “mark all read”.** The
 > notification, context, filter, page, adapter and error types are implemented in
 > `@nickkupriyanov/inboxline-core` (`packages/core/src/`), next to the RFC 3339
 > timestamp and calendar-day helpers, the boundary checks an adapter wraps its
@@ -13,20 +13,21 @@ work; this file owns the descriptions.
 > configuration with its `en`/`ru` copy and plural rules, the stable class slots,
 > the pure `deriveInboxView()` with its snapshot memo, `createMockAdapter()` with
 > its simulator controls, and `createInboxController()` with its lifecycle,
-> first-page, counter, filter and paging loads. Mutations and invalidation
-> subscriptions still belong to Iterations 7–9, and the React binding is marked
-> **Planned** and is not part of the available API.
+> first-page, counter, filter, paging and mutation behaviour — including the
+> server-side bulk operation. Invalidation subscriptions still belong to
+> Iteration 9, and the React binding is marked **Planned** and is not part of the
+> available API.
 
 ## 1. Packages and entry points
 
-| Entry point                                  | State                                                    | Content                                                                                                                                                                                                                                           |
-| -------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 6) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model, the deterministic mock adapter and the controller lifecycle, filters and paging. |
-| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                                            | Browser helpers (focus, size observation, available area) — Iteration 10.                                                                                                                                                                         |
-| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                                            | Authored stylesheet — Iteration 11.                                                                                                                                                                                                               |
-| `@nickkupriyanov/inboxline-react`            | Empty placeholder                                        | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                                                                                               |
-| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                                            | Copy of the core stylesheet — Iteration 11.                                                                                                                                                                                                       |
-| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                                       |
+| Entry point                                  | State                                                    | Content                                                                                                                                                                                                                                                      |
+| -------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 8) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model, the deterministic mock adapter and the controller lifecycle, filters, paging and mutations. |
+| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                                            | Browser helpers (focus, size observation, available area) — Iteration 10.                                                                                                                                                                                    |
+| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                                            | Authored stylesheet — Iteration 11.                                                                                                                                                                                                                          |
+| `@nickkupriyanov/inboxline-react`            | Empty placeholder                                        | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                                                                                                          |
+| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                                            | Copy of the core stylesheet — Iteration 11.                                                                                                                                                                                                                  |
+| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                                                  |
 
 The core publishes values from `./adapter`, `./classNames`, `./config`,
 `./context`, `./controller`, `./derive`, `./errors`, `./i18n`, `./mock`,
@@ -49,7 +50,7 @@ public slot type.
 
 ## 2. Controller and snapshot
 
-**Implemented in Iterations 5–7** (`packages/core/src/controller.ts`).
+**Implemented in Iterations 5–8** (`packages/core/src/controller.ts`).
 `createInboxController({ adapter, context?, filter?, config?, clock?, callbacks? })`
 owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
 (`start`/`stop`), `refreshTime()`, `updateConfig()` and `actions`.
@@ -106,6 +107,15 @@ owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
 - `reconcile()` repeats that reconciliation when the automatic one failed: a
   successful first page and counter are the confirmed server state and resolve
   unknown rows. With nothing to reconcile it does nothing.
+- `markAllRead()` runs the bulk operation on its own: it is refused while an
+  individual change is queued, and individual `setRead()` calls are refused while
+  it runs. Its optimistic layer projects every loaded row as read and the counter
+  as zero. On success the server boundary marks the loaded rows created at or
+  before it read, the server counter is installed, and a refreshed first page
+  brings in the events created after the boundary — they stay unread. A confirmed
+  refusal drops the layer. A lost answer stays `unknown` and is reconciled with a
+  refresh, never repeated automatically. It does nothing while the counter is
+  unknown or zero.
 - `setContext(context)` resets the rows, counter, paging, optimistic layer — and
   the queued mutations — when the key changes, and starts a fresh load if the
   controller is started. Replacing `context.data` under the same key only updates
@@ -125,8 +135,8 @@ owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
   contained: it neither rejects the action nor triggers a second request, and a
   cancelled request never reaches `onError`.
 - `actions` is the fixed vocabulary below. `refresh`, `retry`, `setFilter`,
-  `loadMore`, `setRead`, `reconcile`, `setContext` and `setAdapter` are live;
-  `markAllRead` remains a no-op until Iteration 8.
+  `loadMore`, `setRead`, `markAllRead`, `reconcile`, `setContext` and
+  `setAdapter` are live.
 
 ```ts
 const inbox = createInboxController({
@@ -179,8 +189,9 @@ and a correction of the displayed counter are based on. The three outcomes need
 no third field — a confirmed operation leaves no entry (the confirmed row shows),
 a rejected one leaves no entry either (only the optimistic value is retracted and
 the failure reaches `onError`), and an operation whose answer was lost stays with
-`status: 'unknown'` until the application reconciles. `bulk` is declared and its
-transitions arrive in Iteration 8.
+`status: 'unknown'` until the application reconciles. `bulk` is `{ token, status }`
+or `null`; it is one operation for the whole context, so it never appears in
+`readOrder`.
 
 | Action                                         | Effect                                                                                                          |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -193,6 +204,10 @@ transitions arrive in Iteration 8.
 | `readConfirmed`                                | Writes the confirmed row (only if it is already loaded) and the server counter, and drops the operation.        |
 | `readFailed`                                   | Rolls back that operation only.                                                                                 |
 | `readUnknown`                                  | Keeps the operation, marked `unknown`.                                                                          |
+| `bulkPending`                                  | Records the whole-context operation in `pending.bulk`, without touching the rows or the counter.                |
+| `bulkConfirmed`                                | Marks loaded rows at or before the server boundary read, installs the server counter and drops the layer.       |
+| `bulkFailed`                                   | Rolls back the bulk layer only.                                                                                 |
+| `bulkUnknown`                                  | Keeps the bulk layer as `unknown`.                                                                              |
 | `readsReconciled`                              | A fresh authoritative page and counter arrived: drops the operations marked `unknown`, leaves the pending ones. |
 
 Rules the transitions guarantee:
@@ -216,27 +231,30 @@ Rules the transitions guarantee:
    and the confirmed data untouched.
 6. **Confirmed data is not mutated.** The adapter's objects are stored, not
    copied or rewritten, and the reducer never mutates its input.
+7. **The bulk boundary is server data.** `bulkConfirmed` reads `boundary` as the
+   only definition of which loaded rows the operation covered: rows created at or
+   before it become read, later rows keep their confirmed state, and the counter
+   is installed exactly as reported — it is not assumed to be zero.
 
 ### The action vocabulary
 
-**Fixed in Iteration 1, runtime from Iterations 5–7**
+**Fixed in Iteration 1, runtime from Iterations 5–8**
 (`packages/core/src/controller.ts`). Every action that talks to the server
 resolves when the operation has settled, successfully or not, and never rejects:
 a failure is reported through `onError` and through the snapshot, so a binding
-never needs a `.catch()` to keep a console clean. `markAllRead` is present but
-deliberately inert until Iteration 8.
+never needs a `.catch()` to keep a console clean.
 
-| Action                | Meaning                                                                                                                 |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `setFilter(filter)`   | Selects the list filter. The global counter is not affected.                                                            |
-| `refresh()`           | Reloads the first page and the counter, replacing the loaded list.                                                      |
-| `retry()`             | Repeats exactly the loads that failed, including a failed page at the same cursor; with nothing failed it does nothing. |
-| `loadMore()`          | Appends the next page of the current filter and context; one request at a time, and a repeated cursor ends the list.    |
-| `setRead(id, read)`   | Sets a desired read state; the change is queued until the server confirms it. `read` is a state, not a toggle.          |
-| `markAllRead()`       | Marks every notification of the context read on the server, including the ones never loaded.                            |
-| `reconcile()`         | Reads the server state again after an unknown outcome, without retrying the operation.                                  |
-| `setContext(context)` | Replaces the context; in-flight work of the previous one is abandoned.                                                  |
-| `setAdapter(adapter)` | Replaces the adapter; in-flight work of the previous one is abandoned.                                                  |
+| Action                | Meaning                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `setFilter(filter)`   | Selects the list filter. The global counter is not affected.                                                                    |
+| `refresh()`           | Reloads the first page and the counter, replacing the loaded list.                                                              |
+| `retry()`             | Repeats exactly the loads that failed, including a failed page at the same cursor; with nothing failed it does nothing.         |
+| `loadMore()`          | Appends the next page of the current filter and context; one request at a time, and a repeated cursor ends the list.            |
+| `setRead(id, read)`   | Sets a desired read state; the change is queued until the server confirms it. `read` is a state, not a toggle.                  |
+| `markAllRead()`       | Marks every notification of the context read on the server, including the ones never loaded; runs outside the individual queue. |
+| `reconcile()`         | Reads the server state again after an unknown outcome, without retrying the operation.                                          |
+| `setContext(context)` | Replaces the context; in-flight work of the previous one is abandoned.                                                          |
+| `setAdapter(adapter)` | Replaces the adapter; in-flight work of the previous one is abandoned.                                                          |
 
 Callbacks are `onNotificationClick(notification)` — the application navigates,
 the library never opens a link — and `onError(error)`; a cancelled request never
@@ -319,6 +337,47 @@ so two clients or a repeated click can never flip a row by accident.
   after the server received it would create the unknown outcome the contract
   tries to avoid.
 
+### The bulk “mark all read” operation
+
+**Implemented in Iteration 8** (`packages/core/src/controller.ts`,
+`packages/core/src/reducer.ts`, `packages/core/src/derive.ts`). The bulk operation
+is one server call for the whole context, so it is deliberately not part of the
+individual queue.
+
+- **It runs alone.** `markAllRead()` does nothing while an individual operation is
+  queued or in flight, and `setRead()` does nothing while a bulk operation is
+  pending or `unknown`. The derived `canMarkAllRead` is `false` in both cases, so
+  the button and the action agree.
+- **The layer is optimistic, not confirmed.** `bulkPending` writes only
+  `pending.bulk`. The derivation shows every loaded row as read and projects the
+  counter to zero, because the request covers rows that were never loaded and
+  their number is unknown. The confirmed rows and `state.unreadCount` are not
+  rewritten.
+- **The server boundary decides.** A successful answer carries
+  `{ boundary, unreadCount }`. `bulkConfirmed` marks the loaded rows whose
+  `createdAt` is at or before the boundary read (already-read rows keep their
+  server object), leaves rows created after the boundary as the server reported
+  them, installs the counter and drops the layer. The counter is not assumed to be
+  zero: an event created after the boundary can legitimately keep it positive.
+- **The first page follows the boundary.** After the confirmed answer the
+  controller refreshes the first page and the counter, so events created after the
+  boundary appear unread and rows that were never loaded are represented by the
+  server's own answer. A failed refresh does not turn a successful bulk operation
+  into a failure.
+- **A refusal retracts the guess.** `bulkFailed` drops `pending.bulk`; the
+  confirmed rows and the server counter were never touched, so the list returns to
+  its previous state. `onError` receives the confirmed `rejected` outcome.
+- **A lost answer is reconciled, never repeated.** Anything that states no
+  outcome becomes an `InboxError` with `outcome: 'unknown'`, `bulkUnknown` keeps
+  the layer visible, and the controller refreshes the first page and counter.
+  `readsReconciled` drops the unknown bulk layer after that authoritative answer.
+  Calling `markAllRead` again is a new user action with a new boundary; the
+  library never sends it automatically.
+- **Lifecycle.** A context change resets the bulk layer with the rest of the
+  state. Replacing the adapter retracts it before the new source is loaded. A bulk
+  request that already left is allowed to settle, and its answer is dropped by the
+  source generation.
+
 ### The derived view model
 
 **Implemented in Iteration 3** (`packages/core/src/derive.ts`,
@@ -347,16 +406,19 @@ Rules the derivation guarantees:
    `timeLabel` is relative inside today and an absolute short date otherwise.
 2. **The optimistic layer shows.** A row's `read`/`unread` are the effective
    values — a queued operation wins over the confirmed one — and `pending`/
-   `unknown` describe that operation. A rolled-back operation is simply absent
-   again, and the confirmed row shows through. In the `unread` filter a row whose
-   effective state is read is not rendered, so the selection stays honest while
-   the operation settles.
+   `unknown` describe that operation. A pending or `unknown` bulk operation makes
+   every loaded row read until its boundary or a reconciliation replaces the
+   guess. A rolled-back operation is simply absent again, and the confirmed row
+   shows through. In the `unread` filter a row whose effective state is read is
+   not rendered, so the selection stays honest while the operation settles.
 3. **The counter is server data.** `unreadCount` stays `null` and `known` stays
    `false` until the server reports a number, and `label` stays `null` until then.
    Pending operations are projected onto that number, one step per row and based
    on the confirmed state each started from; a lost answer is left out until it is
-   reconciled. The projection is independent of the loaded page and of the
-   filter: a page of ten rows under a counter of 27 is a valid view.
+   reconciled. A pending bulk operation projects zero instead, because it claims
+   the whole context; an unknown bulk operation is left out like any lost answer.
+   The projection is independent of the loaded page and of the filter: a page of
+   ten rows under a counter of 27 is a valid view.
 4. **Action availability is conservative.** `canMarkAllRead` needs a known
    non-zero counter, no queued individual operation and no bulk operation in
    flight; `canLoadMore` needs a next cursor, a ready list and no page already
@@ -584,8 +646,8 @@ reach `onError`.
 
 The result of `markAllRead` is `{ boundary, unreadCount }`, where `boundary` is
 the server moment the operation was applied. That single field decides both
-questions an unknown outcome raises (the open question is answered here and in
-Iteration 8):
+questions an unknown outcome raises (the open question was answered here and the
+operation is implemented in Iteration 8):
 
 - Notifications with `createdAt <= boundary` are read; the ones created after it
   are not, so reconciliation compares confirmed rows against the boundary instead
@@ -596,21 +658,25 @@ Iteration 8):
 
 ### Optimistic actions and unknown outcomes
 
-**The individual actions are implemented in Iteration 7; the bulk operation
-arrives in Iteration 8.**
+**The individual actions are implemented in Iteration 7; the bulk operation in
+Iteration 8.**
 
 - Optimistic changes are a separate layer above confirmed data. A failure of one
   operation rolls back only that operation's layer; new notifications and other
   successful changes survive.
 - Mutations are serialised inside one controller. The bulk operation runs
   separately from the queue of individual changes, and its button is disabled
-  while that queue is busy.
+  while that queue is busy. Individual changes are refused while the bulk
+  operation runs.
 - A confirmed rejection is distinguished from an unknown outcome by
   `InboxError.outcome` (Iteration 1); an unknown outcome requires reconciliation
   with the server and never triggers an automatic retry of the mutation. A
-  successful first page and counter resolve the unknown rows.
+  successful first page and counter resolve the unknown rows and the unknown bulk
+  operation.
 - “Mark all as read” runs on the server for the whole context and therefore
-  covers notifications that were never loaded.
+  covers notifications that were never loaded. Its server boundary decides which
+  loaded rows it covered; events created after the boundary stay unread, so the
+  counter that follows is not necessarily zero.
 
 ### External updates
 
@@ -821,3 +887,13 @@ no outcome is treated as `unknown`; only an adapter that says the change was
 rejected produces a rollback. The `unread` filter removes a row whose effective
 state became read, and a successful refresh of the first page and the counter —
 including the automatic one after a lost answer — resolves the unknown rows.
+
+Resolved in Iteration 8: the bulk operation is one whole-context request outside
+the individual queue. The two kinds of mutation exclude each other; the bulk
+layer projects known rows as read and the counter as zero until the server
+answers. Its `boundary` is what marks loaded rows read, so events created after
+the boundary stay unread and the returned counter is accepted even when it is not
+zero. A confirmed answer is followed by a refreshed first page and counter; a
+refusal drops the layer; a lost answer stays `unknown`, is reconciled by that
+refresh and is never sent again automatically. A context change resets the layer
+and an adapter replacement retracts it.

@@ -5,14 +5,14 @@
  * the controller, errors, time helpers and copy. No React, no DOM access at
  * import time: every binding drives this same core.
  *
- * Iterations 1 to 7 publish the integration contract, the state machine, the
+ * Iterations 1 to 8 publish the integration contract, the state machine, the
  * derived view, the deterministic mock and the controller runtime: the domain
  * types, the context and filter helpers, the error vocabulary, the timestamp and
  * calendar-day helpers, the adapter boundary checks, the pure reducer with its
  * initial state, the resolved configuration, the copy and plural rules, the
  * stable class slots, `deriveInboxView()` with its memo, `createMockAdapter()`
  * with its scenario controls, and `createInboxController()` with its first-page,
- * counter, filter, paging and individual read-status lifecycle.
+ * counter, filter, paging, individual read-status and bulk mark-all lifecycle.
  */
 
 export * from './adapter';

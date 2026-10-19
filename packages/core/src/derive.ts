@@ -73,9 +73,9 @@ export interface InboxItemView<TData = unknown> {
   read: boolean;
   /** `!read`, exposed for styling and for the unread marker. */
   unread: boolean;
-  /** An operation is queued or in flight for this row. */
+  /** An individual operation is queued or in flight for this row. */
   pending: boolean;
-  /** The answer was lost; the application has to reconcile. */
+  /** The answer of this row's individual operation was lost. */
   unknown: boolean;
   /** Relative while the row is from today, an absolute short date otherwise. */
   timeLabel: string;
@@ -197,14 +197,20 @@ function pendingOperationOf<TData>(
  * The counter a binding shows while operations are queued.
  *
  * The confirmed server number stays the baseline and is never rewritten by
- * arithmetic in the state. The visible number projects the *pending* operations
- * onto it, one step per row: an operation that started from a known unread row
- * and asks for read removes one, and the reverse adds one. An operation whose
- * answer was lost is deliberately left out: it may already be part of the last
- * server number, and the reconciliation that follows is what resolves it.
+ * arithmetic in the state. A pending bulk operation claims the whole context, so
+ * it projects zero: the number of unloaded rows is not known, and the server's
+ * own answer — including the events created after its boundary — replaces the
+ * guess on confirmation. Individual operations are projected one step per row:
+ * an operation that started from a known unread row and asks for read removes
+ * one, and the reverse adds one. An operation whose answer was lost is
+ * deliberately left out, which also applies to a bulk operation: it may already
+ * be part of the last server number, and the reconciliation that follows is what
+ * resolves it.
  */
 function effectiveUnreadCountOf<TData>(state: InboxState<TData>): number | null {
   if (state.unreadCount === null) return null;
+
+  if (state.pending.bulk?.status === 'pending') return 0;
 
   let projected = state.unreadCount;
   for (const id of state.pending.readOrder) {
@@ -232,6 +238,9 @@ export function deriveInboxView<TData = unknown>(
 ): InboxView<TData> {
   const { messages, locale, timeZone } = config;
 
+  const bulk = state.pending.bulk;
+  const bulkReadsKnownRows = bulk !== null;
+
   const items: InboxItemView<TData>[] = [];
   const groups: InboxGroupView<TData>[] = [];
   let group: InboxGroupView<TData> | null = null;
@@ -241,7 +250,10 @@ export function deriveInboxView<TData = unknown>(
     if (notification === undefined) continue;
 
     const operation = pendingOperationOf(state, id);
-    const read = operation ? operation.read : notification.read;
+    // The bulk operation covers the whole context and is optimistic for every
+    // row that is already known; an individual operation for the same row wins,
+    // although the controller never lets the two overlap.
+    const read = operation ? operation.read : bulkReadsKnownRows ? true : notification.read;
     const unread = !read;
     // The unread view is a live selection, not a snapshot of the request: a row
     // that becomes read — optimistically or after confirmation — leaves the
@@ -284,7 +296,6 @@ export function deriveInboxView<TData = unknown>(
   const unreadCount = effectiveUnreadCountOf(state);
   const countLabel = unreadCount === null ? null : counterLabelOf(unreadCount, config);
   const hasMore = state.nextCursor !== null;
-  const bulk = state.pending.bulk;
 
   return {
     settings: {

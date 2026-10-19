@@ -336,6 +336,48 @@ describe('the optimistic layer in the view', () => {
     expect(item?.unknown).toBe(true);
     expect(deriveInboxView(unknown, CONFIG, ANCHOR).actions.busy).toBe(true);
   });
+
+  it('shows every known row as read and projects the counter to zero while the bulk runs', () => {
+    const base = counted(loaded([note('a'), note('b', { read: true }), note('c')]), 27);
+    const bulk = inboxReducer(base, { type: 'bulkPending', token: 2 });
+    const view = deriveInboxView(bulk, CONFIG, ANCHOR);
+
+    expect(view.list.items.every((item) => item.read)).toBe(true);
+    expect(view.counter.unreadCount).toBe(0);
+    expect(view.counter.known).toBe(true);
+    // The confirmed number in the state is untouched by the projection.
+    expect(bulk.unreadCount).toBe(27);
+    expect(view.actions.busy).toBe(true);
+    expect(view.actions.canMarkAllRead).toBe(false);
+  });
+
+  it('keeps a lost bulk answer out of the counter projection', () => {
+    const base = counted(loaded([note('a'), note('b')]), 2);
+    const pending = inboxReducer(base, { type: 'bulkPending', token: 2 });
+    expect(deriveInboxView(pending, CONFIG, ANCHOR).counter.unreadCount).toBe(0);
+
+    const unknown = inboxReducer(pending, { type: 'bulkUnknown', token: 2 });
+    const view = deriveInboxView(unknown, CONFIG, ANCHOR);
+    expect(view.counter.unreadCount).toBe(2);
+    expect(view.list.items.every((item) => item.read)).toBe(true);
+    expect(view.actions.busy).toBe(true);
+  });
+
+  it('empties the unread selection while the bulk operation runs', () => {
+    const base = counted(loaded([note('a'), note('b')], { filter: 'unread' }), 2);
+    const bulk = inboxReducer(base, { type: 'bulkPending', token: 2 });
+    const view = deriveInboxView(bulk, CONFIG, ANCHOR);
+
+    expect(view.list.items).toEqual([]);
+    expect(view.list.empty).toBe(true);
+    expect(view.list.emptyLabel).toBe('No unread notifications');
+
+    const refused = inboxReducer(bulk, { type: 'bulkFailed', token: 2 });
+    expect(deriveInboxView(refused, CONFIG, ANCHOR).list.items.map((item) => item.id)).toEqual([
+      'a',
+      'b',
+    ]);
+  });
 });
 
 describe('action availability', () => {
@@ -357,7 +399,7 @@ describe('action availability', () => {
     const state = counted(loaded([]), 3);
     const bulk: InboxState = {
       ...state,
-      pending: { ...state.pending, bulk: { status: 'pending' } },
+      pending: { ...state.pending, bulk: { token: 1, status: 'pending' } },
     };
     const view = deriveInboxView(bulk, CONFIG, ANCHOR);
     expect(view.actions.canMarkAllRead).toBe(false);

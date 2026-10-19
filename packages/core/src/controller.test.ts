@@ -1390,6 +1390,336 @@ describe('individual read operations', () => {
   });
 });
 
+describe('the server-side “mark all read” operation', () => {
+  it('marks rows that were never loaded and keeps the server order', async () => {
+    const clock = clockAt(NOW);
+    const notifications = Array.from({ length: 27 }, (_, index) =>
+      note(`n${String(index).padStart(2, '0')}`, {
+        createdAt: new Date(NOW - index * 60_000).toISOString(),
+        read: index === 3,
+      }),
+    );
+    const adapter = createMockAdapter({
+      clock,
+      pageSize: 10,
+      contexts: [{ context: DEFAULT_INBOX_CONTEXT, notifications }],
+    });
+    const controller = createInboxController({ adapter, clock });
+
+    controller.start();
+    await flush();
+
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toHaveLength(10);
+    expect(snapshot.state.unreadCount).toBe(26);
+    expect(snapshot.view.list.items.map((item) => item.id)).toEqual(
+      notifications.slice(0, 10).map((item) => item.id),
+    );
+
+    await controller.actions.markAllRead();
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.bulk).toBeNull();
+    expect(snapshot.state.order).toEqual(notifications.slice(0, 10).map((item) => item.id));
+    expect(snapshot.view.list.items.every((item) => item.read)).toBe(true);
+    expect(snapshot.state.unreadCount).toBe(0);
+    expect(snapshot.view.counter.unreadCount).toBe(0);
+
+    // The proof goes through the mock store, not through the loaded page: the
+    // 17 rows that were never requested are read as well.
+    const { unreadCount } = await adapter.getUnreadCount({
+      context: DEFAULT_INBOX_CONTEXT,
+      signal: new AbortController().signal,
+    });
+    expect(unreadCount).toBe(0);
+  });
+
+  it('keeps an event created after the server boundary unread', async () => {
+    const clock = clockAt(NOW);
+    const adapter = createMockAdapter({
+      clock,
+      contexts: [{ context: DEFAULT_INBOX_CONTEXT, notifications: [note('a'), note('b')] }],
+    });
+    const controller = createInboxController({ adapter, clock });
+
+    controller.start();
+    await flush();
+    await controller.actions.markAllRead();
+
+    expect(controller.getSnapshot().state.unreadCount).toBe(0);
+
+    adapter.addNotification(
+      DEFAULT_INBOX_CONTEXT,
+      note('after', { createdAt: '2026-10-18T13:05:00Z' }),
+    );
+    await controller.actions.refresh();
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['after', 'a', 'b']);
+    expect(snapshot.view.list.items[0]?.read).toBe(false);
+    expect(snapshot.view.list.items[0]?.unread).toBe(true);
+    expect(snapshot.state.unreadCount).toBe(1);
+  });
+
+  it('includes an event stored before the boundary and never loaded first', async () => {
+    const clock = clockAt(NOW);
+    const adapter = createMockAdapter({
+      clock,
+      contexts: [{ context: DEFAULT_INBOX_CONTEXT, notifications: [note('a'), note('b')] }],
+    });
+    adapter.setLatency((operation) => (operation === 'markAllRead' ? 20 : 0));
+    const controller = createInboxController({ adapter, clock });
+
+    controller.start();
+    await flush();
+
+    const marking = controller.actions.markAllRead();
+    expect(controller.getSnapshot().state.pending.bulk?.status).toBe('pending');
+    expect(controller.getSnapshot().view.counter.unreadCount).toBe(0);
+
+    // Created after the click but before the mock reads its boundary: the server
+    // covers it, even though the page on screen never held it.
+    adapter.addNotification(
+      DEFAULT_INBOX_CONTEXT,
+      note('early', { createdAt: '2026-10-18T12:58:00Z' }),
+    );
+    await marking;
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.order[0]).toBe('early');
+    expect(snapshot.view.list.items[0]?.read).toBe(true);
+    expect(snapshot.state.unreadCount).toBe(0);
+  });
+
+  it('applies the confirmed boundary before the refreshed first page replaces the chain', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+    controller.start();
+    script.lists[0].resolve(
+      page([
+        note('early', { createdAt: '2026-10-18T12:50:00Z' }),
+        note('late', { createdAt: '2026-10-18T12:56:00Z' }),
+        note('already', { createdAt: '2026-10-18T12:40:00Z', read: true }),
+      ]),
+    );
+    script.counts[0].resolve({ unreadCount: 27 });
+    await flush();
+
+    const marking = controller.actions.markAllRead();
+
+    expect(script.calls.marksAll).toHaveLength(1);
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.bulk?.status).toBe('pending');
+    expect(snapshot.view.list.items.every((item) => item.read)).toBe(true);
+    expect(snapshot.view.counter.unreadCount).toBe(0);
+    expect(snapshot.state.unreadCount).toBe(27);
+    expect(snapshot.view.actions.canMarkAllRead).toBe(false);
+
+    script.marks[0].resolve({ boundary: '2026-10-18T12:55:00Z', unreadCount: 4 });
+    await flush();
+
+    // The boundary settles the loaded rows; the first page that follows is what
+    // shows what the boundary left unread.
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.bulk).toBeNull();
+    expect(snapshot.state.byId.early?.read).toBe(true);
+    expect(snapshot.state.byId.already?.read).toBe(true);
+    expect(snapshot.state.byId.late?.read).toBe(false);
+    expect(snapshot.state.unreadCount).toBe(4);
+    expect(script.calls.lists).toHaveLength(2);
+
+    script.lists[1].resolve(
+      page([
+        note('late', { createdAt: '2026-10-18T12:56:00Z' }),
+        note('early', { createdAt: '2026-10-18T12:50:00Z', read: true }),
+        note('after', { createdAt: '2026-10-18T12:57:00Z' }),
+      ]),
+    );
+    script.counts[1].resolve({ unreadCount: 2 });
+    await marking;
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['late', 'early', 'after']);
+    expect(snapshot.view.list.items.map((item) => item.read)).toEqual([false, true, false]);
+    expect(snapshot.state.unreadCount).toBe(2);
+    expect(snapshot.view.actions.busy).toBe(false);
+  });
+
+  it('reconciles a lost answer against a server that already applied it', async () => {
+    const clock = clockAt(NOW);
+    const onError = vi.fn();
+    const adapter = createMockAdapter({
+      clock,
+      contexts: [{ context: DEFAULT_INBOX_CONTEXT, notifications: [note('a'), note('b')] }],
+    });
+    const controller = createInboxController({ adapter, clock, callbacks: { onError } });
+
+    controller.start();
+    await flush();
+    adapter.failNext('markAllRead', { apply: true, outcome: 'unknown' });
+
+    await controller.actions.markAllRead();
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.bulk).toBeNull();
+    expect(snapshot.view.list.items.every((item) => item.read)).toBe(true);
+    expect(snapshot.state.unreadCount).toBe(0);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]?.[0]?.outcome).toBe('unknown');
+
+    const { unreadCount } = await adapter.getUnreadCount({
+      context: DEFAULT_INBOX_CONTEXT,
+      signal: new AbortController().signal,
+    });
+    expect(unreadCount).toBe(0);
+  });
+
+  it('rolls the whole layer back on a confirmed refusal', async () => {
+    const onError = vi.fn();
+    const script = createScriptedAdapter();
+    const controller = createInboxController({
+      adapter: script.adapter,
+      clock: clockAt(NOW),
+      callbacks: { onError },
+    });
+    controller.start();
+    script.lists[0].resolve(page([note('a'), note('b')]));
+    script.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    const marking = controller.actions.markAllRead();
+    script.marks[0].reject(
+      new InboxError({ code: 'CONFLICT', phase: 'mutation', message: 'The context moved on' }),
+    );
+    await marking;
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.bulk).toBeNull();
+    expect(snapshot.view.list.items.every((item) => item.read)).toBe(false);
+    expect(snapshot.state.unreadCount).toBe(2);
+    expect(snapshot.view.counter.unreadCount).toBe(2);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]?.[0]?.outcome).toBe('rejected');
+  });
+
+  it('reconciles a lost answer and never repeats the bulk request', async () => {
+    const onError = vi.fn();
+    const script = createScriptedAdapter();
+    const controller = createInboxController({
+      adapter: script.adapter,
+      clock: clockAt(NOW),
+      callbacks: { onError },
+    });
+    controller.start();
+    script.lists[0].resolve(page([note('a'), note('b')]));
+    script.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    const marking = controller.actions.markAllRead();
+    script.marks[0].reject(new Error('The connection dropped mid-flight'));
+    await flush();
+
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.bulk?.status).toBe('unknown');
+    // The lost answer is not projected as a confirmed zero.
+    expect(snapshot.view.counter.unreadCount).toBe(2);
+    expect(script.calls.lists).toHaveLength(2);
+    expect(script.calls.marksAll).toHaveLength(1);
+    expect(onError.mock.calls[0]?.[0]?.outcome).toBe('unknown');
+
+    script.lists[1].resolve(page([note('a', { read: true }), note('b', { read: true })]));
+    script.counts[1].resolve({ unreadCount: 0 });
+    await marking;
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.bulk).toBeNull();
+    expect(snapshot.view.list.items.every((item) => item.read)).toBe(true);
+    expect(snapshot.state.unreadCount).toBe(0);
+    expect(script.calls.marksAll).toHaveLength(1);
+  });
+
+  it('is refused while the individual queue is busy and refuses individual changes while it runs', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+    controller.start();
+    script.lists[0].resolve(page([note('a'), note('b')]));
+    script.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    const reading = controller.actions.setRead('a', true);
+    const busy = controller.actions.markAllRead();
+    expect(script.calls.marksAll).toHaveLength(0);
+
+    script.reads[0].resolve({ notification: { ...note('a'), read: true }, unreadCount: 1 });
+    await reading;
+    await busy;
+
+    const marking = controller.actions.markAllRead();
+    expect(script.calls.marksAll).toHaveLength(1);
+
+    // The bulk operation owns the context: a click on one row is ignored.
+    await controller.actions.setRead('b', true);
+    expect(script.calls.reads).toHaveLength(1);
+
+    script.marks[0].resolve({ boundary: '2026-10-18T13:00:00Z', unreadCount: 0 });
+    await flush();
+    script.lists[1].resolve(page([note('a', { read: true }), note('b', { read: true })]));
+    script.counts[1].resolve({ unreadCount: 0 });
+    await marking;
+
+    expect(controller.getSnapshot().state.pending.bulk).toBeNull();
+    expect(controller.getSnapshot().state.pending.reads).toEqual({});
+  });
+
+  it('does nothing while the counter is unknown or zero', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    // Before `start` the counter is unknown.
+    await controller.actions.markAllRead();
+    expect(script.calls.marksAll).toHaveLength(0);
+
+    controller.start();
+    script.lists[0].resolve(page([note('a', { read: true })]));
+    script.counts[0].resolve({ unreadCount: 0 });
+    await flush();
+
+    await controller.actions.markAllRead();
+    expect(script.calls.marksAll).toHaveLength(0);
+  });
+
+  it('drops an answer that arrives after the context changed', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({
+      adapter: script.adapter,
+      context: { key: 'user-1' },
+      clock: clockAt(NOW),
+    });
+    controller.start();
+    script.lists[0].resolve(page([note('a'), note('b')]));
+    script.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    const marking = controller.actions.markAllRead();
+    controller.actions.setContext({ key: 'user-2' });
+
+    expect(controller.getSnapshot().state.pending.bulk).toBeNull();
+
+    script.lists[1].resolve(page([note('fresh')]));
+    script.counts[1].resolve({ unreadCount: 5 });
+    await flush();
+
+    script.marks[0].resolve({ boundary: '2026-10-18T13:00:00Z', unreadCount: 0 });
+    await marking;
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.contextKey).toBe('user-2');
+    expect(snapshot.state.order).toEqual(['fresh']);
+    expect(snapshot.state.unreadCount).toBe(5);
+    expect(snapshot.state.pending.bulk).toBeNull();
+  });
+});
+
 describe('configuration and time', () => {
   it('resolves the initial configuration and ignores an equal replacement', () => {
     const script = createScriptedAdapter();
