@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import * as core from './index';
 
 /**
- * The entry point of the core: the integration contract and the state machine,
- * and nothing that talks to a network or the DOM. The list is deliberate — a new
- * runtime export has to be added here, which is the moment to ask whether it
- * belongs in the surface of the core at all.
+ * The entry point of the core: the integration contract, the state machine, the
+ * derived view model and the copy, and nothing that talks to a network or the
+ * DOM. The list is deliberate — a new runtime export has to be added here, which
+ * is the moment to ask whether it belongs in the surface of the core at all.
  */
 const EXPECTED_EXPORTS: readonly string[] = [
   // adapter contract and boundary checks
@@ -19,6 +19,14 @@ const EXPECTED_EXPORTS: readonly string[] = [
   'assertInboxUnreadCount',
   'assertInboxReadStatusResult',
   'assertInboxMarkAllReadResult',
+  // stable class names
+  'IL_CLASS',
+  // configuration
+  'FALLBACK_LOCALE',
+  'FALLBACK_TIME_ZONE',
+  'isSupportedInboxLocale',
+  'isSupportedInboxTimeZone',
+  'resolveInboxConfig',
   // context and filter
   'DEFAULT_CONTEXT_KEY',
   'DEFAULT_INBOX_CONTEXT',
@@ -27,6 +35,11 @@ const EXPECTED_EXPORTS: readonly string[] = [
   'isInboxFilter',
   'isInboxContext',
   'isSameInboxContext',
+  // derived view model
+  'INBOX_VIEW_TIME_BUCKET_MS',
+  'createInboxViewMemo',
+  'deriveInboxView',
+  'inboxViewKey',
   // errors
   'INBOX_ERROR_CODES',
   'INBOX_ERROR_PHASES',
@@ -41,11 +54,26 @@ const EXPECTED_EXPORTS: readonly string[] = [
   'createUnknownOutcomeError',
   'isAbortError',
   'createAbortError',
+  // copy
+  'defaultMessages',
+  'resolveMessageLocale',
+  'resolveMessages',
+  'format',
+  'selectPlural',
   // state machine
   'createInboxState',
   'inboxReducer',
   // time
   'isInboxTimestamp',
+  'isInboxDayKey',
+  'dayKeyOf',
+  'dayKeyOfInstant',
+  'addDaysToDayKey',
+  'createInboxTimeAnchor',
+  'systemInboxClock',
+  'formatInboxRelativeTime',
+  'formatInboxDayLabel',
+  'formatInboxItemTime',
 ];
 
 describe('@nickkupriyanov/inboxline-core entry point', () => {
@@ -55,12 +83,12 @@ describe('@nickkupriyanov/inboxline-core entry point', () => {
     expect(typeof document).toBe('undefined');
   });
 
-  it('exports the contract and the state machine, and nothing else', () => {
+  it('exports the contract, the state machine, the derived view and the copy, and nothing else', () => {
     expect(Object.keys(core).sort()).toEqual([...EXPECTED_EXPORTS].sort());
   });
 
-  it('exports no React binding and no controller runtime yet', () => {
+  it('exports the derived view but no controller runtime yet', () => {
+    expect(typeof core.deriveInboxView).toBe('function');
     expect('createInboxController' in core).toBe(false);
-    expect('deriveInboxView' in core).toBe(false);
   });
 });

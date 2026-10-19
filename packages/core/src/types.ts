@@ -176,3 +176,149 @@ export type InboxErrorPhase = 'load' | 'mutation';
  * been applied and the client has to reconcile instead of assuming.
  */
 export type InboxErrorOutcome = 'rejected' | 'unknown';
+
+/* -------------------------------------------------------------------------- */
+/*  Time reference                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The time the core reasons about.
+ *
+ * Nothing in the core reads the wall clock directly: the controller holds an
+ * anchor, a binding advances it, and the pure helpers of `./time` receive it
+ * explicitly. `today` and `yesterday` are calendar days in the configured time
+ * zone, so the day groups and the relative labels stay correct on both sides of
+ * midnight and in any zone.
+ */
+export interface InboxTimeAnchor {
+  /** Unix time in milliseconds the view is derived for. */
+  nowMs: number;
+  /** `YYYY-MM-DD` of `nowMs` in the configured time zone. */
+  today: string;
+  /** `YYYY-MM-DD` of the day before `today`, in the configured time zone. */
+  yesterday: string;
+}
+
+/**
+ * Injectable time source.
+ *
+ * A binding may use it to advance the anchor — relative labels grow stale as the
+ * clock moves — and a test fixes it, so a scenario never depends on when it runs.
+ */
+export interface InboxClock {
+  /** Unix time in milliseconds. */
+  now(): number;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Copy                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/** A locale whose copy ships with the library. */
+export type InboxLocale = 'en' | 'ru';
+
+/**
+ * One message with its plural forms.
+ *
+ * `other` is always present: it is the form a locale that lists no matching
+ * category falls back to. A locale uses the categories its own
+ * `Intl.PluralRules` reports — English `one`/`other`, Russian `one`/`few`/`many`
+ * — and `selectPlural()` substitutes the single `{count}` placeholder.
+ */
+export interface InboxPluralMessage {
+  /** Used by locales that have a `zero` category (Latvian, for instance). */
+  zero?: string;
+  /** `1`, and `21`, `31` … in Russian. */
+  one?: string;
+  /** `2` in Welsh. */
+  two?: string;
+  /** `2`–`4` in Russian. */
+  few?: string;
+  /** `5`–`20` in Russian. */
+  many?: string;
+  /** The form every locale has, and the fallback for an unlisted category. */
+  other: string;
+}
+
+/**
+ * Every piece of copy the core renders.
+ *
+ * Dictionaries hold plain text with `{placeholder}` markers and no markup, so a
+ * message can never inject HTML. `resolveMessages()` merges a consumer's
+ * overrides key by key over the built-in `en`/`ru` dictionary; an application
+ * that passes its own dictionary replaces every key it names.
+ */
+export interface InboxMessages {
+  /** Accessible name of the notification list. */
+  listLabel: string;
+  /** Counter text, for example `{count} unread notifications`. */
+  countLabel: InboxPluralMessage;
+  /** Shown instead of a number while the server has not reported a counter. */
+  countUnknownLabel: string;
+  /** The loaded list is empty under the “All” filter. */
+  emptyLabel: string;
+  /** The loaded list is empty under the “Unread” filter. */
+  emptyUnreadLabel: string;
+  /** The first page is being loaded. */
+  loadingLabel: string;
+  /** The first page failed. */
+  listErrorLabel: string;
+  /** The next page failed; the rows already shown stay on screen. */
+  pageErrorLabel: string;
+  /** The counter failed; the previous value, or “unknown”, stays. */
+  countErrorLabel: string;
+  /** Repeats the request that failed. */
+  retryLabel: string;
+  /** Loads the next page. */
+  loadMoreLabel: string;
+  /** Marks every notification of the context read on the server. */
+  markAllReadLabel: string;
+  /** Day group of the current day. */
+  todayLabel: string;
+  /** Day group of the previous day. */
+  yesterdayLabel: string;
+  /** Spoken after a row's time to mark it unread; the colour is not the only signal. */
+  unreadMarkerLabel: string;
+  /** Relative time of a notification younger than a minute. */
+  timeNow: string;
+  /** Relative time in minutes. */
+  relativeMinute: InboxPluralMessage;
+  /** Relative time in hours, inside the current day. */
+  relativeHour: InboxPluralMessage;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Stable class names                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every customisable class slot of Inboxline.
+ *
+ * A slot is an extension point, not a DOM structure: the base class from
+ * `IL_CLASS` marks the part, and the `classNames` prop adds the consumer's own
+ * class alongside it rather than instead of it. The set stays aligned with the
+ * parts the derived view actually describes — trigger, panel, filter and counter
+ * slots arrive together with their components in Iterations 13 to 16.
+ */
+export type IlClassSlot =
+  | 'root'
+  | 'header'
+  | 'heading'
+  | 'list'
+  | 'group'
+  | 'groupLabel'
+  | 'item'
+  | 'itemAvatar'
+  | 'itemIcon'
+  | 'itemContent'
+  | 'itemTitle'
+  | 'itemBody'
+  | 'itemMeta'
+  | 'itemTime'
+  | 'itemUnreadMarker'
+  | 'empty'
+  | 'loading'
+  | 'error'
+  | 'pageError'
+  | 'loadMore'
+  | 'live';

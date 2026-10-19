@@ -5,30 +5,34 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 2 — the state machine.** The notification, context,
-> filter, page, adapter and error types are implemented in
-> `@nickkupriyanov/inboxline-core`, next to the RFC 3339 timestamp check, the
-> boundary checks an adapter wraps its payloads in, and the pure reducer with its
-> initial state (`packages/core/src/reducer.ts`). Nothing runs a request yet: the
-> derived view model, the controller and the React binding are marked
-> **Planned** and are not part of the available API.
+> **Current status: Iteration 3 — the derived view model.** The notification,
+> context, filter, page, adapter and error types are implemented in
+> `@nickkupriyanov/inboxline-core` (`packages/core/src/`), next to the RFC 3339
+> timestamp and calendar-day helpers, the boundary checks an adapter wraps its
+> payloads in, the pure reducer with its initial state, the resolved
+> configuration with its `en`/`ru` copy and plural rules, the stable class slots,
+> and the pure `deriveInboxView()` with its snapshot memo. Nothing runs a request
+> yet: the deterministic mock adapter arrives in Iteration 4, the controller in 5,
+> and the React binding is marked **Planned** and is not part of the available
+> API.
 
 ## 1. Packages and entry points
 
-| Entry point                                  | State                            | Content                                                                                    |
-| -------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------ |
-| `@nickkupriyanov/inboxline-core`             | Contract and state (Iteration 2) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer. |
-| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                    | Browser helpers (focus, size observation, available area) — Iteration 10.                  |
-| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                    | Authored stylesheet — Iteration 11.                                                        |
-| `@nickkupriyanov/inboxline-react`            | Empty placeholder                | Provider, hooks and layouts — Iteration 12 onwards.                                        |
-| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                    | Copy of the core stylesheet — Iteration 11.                                                |
-| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                    | Optional Motion entry point — Iteration 17.                                                |
+| Entry point                                  | State                                  | Content                                                                                                                                                             |
+| -------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@nickkupriyanov/inboxline-core`             | Contract, state and view (Iteration 3) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots and the derived view model. |
+| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                          | Browser helpers (focus, size observation, available area) — Iteration 10.                                                                                           |
+| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                          | Authored stylesheet — Iteration 11.                                                                                                                                 |
+| `@nickkupriyanov/inboxline-react`            | Empty placeholder                      | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                 |
+| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                          | Copy of the core stylesheet — Iteration 11.                                                                                                                         |
+| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                          | Optional Motion entry point — Iteration 17.                                                                                                                         |
 
-The core publishes values from `./adapter`, `./context`, `./errors`, `./reducer`
-and `./time`; `./types` and `./controller` are type-only modules. Modules that
-belong to later iterations — `derive`, `i18n`, `mock`, `dom`, the controller
-runtime and the `styles/` directory — do not exist yet, and `index.test.ts` fails
-when an undeclared runtime export appears.
+The core publishes values from `./adapter`, `./classNames`, `./config`,
+`./context`, `./derive`, `./errors`, `./i18n`, `./reducer` and `./time`;
+`./types` and `./controller` are type-only modules. Modules that belong to later
+iterations — `mock`, `dom`, the controller runtime and the `styles/` directory —
+do not exist yet, and `index.test.ts` fails when an undeclared runtime export
+appears.
 
 Rules that hold for every entry point:
 
@@ -156,6 +160,64 @@ the library never opens a link — and `onError(error)`; a cancelled request nev
 reaches `onError`. The controlled UI values (`open`/`defaultOpen`/`onOpenChange`,
 `filter`/`defaultFilter`/`onFilterChange`) belong to the binding and are
 described in section 4; they reach the core through these actions.
+
+### The derived view model
+
+**Implemented in Iteration 3** (`packages/core/src/derive.ts`,
+`packages/core/src/config.ts`, `packages/core/src/i18n.ts`,
+`packages/core/src/time.ts`, `packages/core/src/classNames.ts`).
+
+`deriveInboxView(state, config, time)` is pure: it reads the flow state, the
+resolved configuration and an `InboxTimeAnchor`, and returns the whole
+`InboxView<TData>` a binding renders. It never reads the clock, never touches the
+DOM and never calls an adapter, so a binding does not format a date a second time.
+
+| Part       | Contents                                                                                                              |
+| ---------- | --------------------------------------------------------------------------------------------------------------------- |
+| `settings` | `locale`, `timeZone`, `filter`, `contextKey`.                                                                         |
+| `counter`  | `unreadCount` (`null` while unknown), `known`, the plural `label`, the load `status`, `loading`, a localized `error`. |
+| `list`     | `status`, `loading`, `error`, `empty`, `emptyLabel`, `loadingLabel`, `label`, `count`, `items`, `groups`.             |
+| `page`     | `status`, `loading`, `error`, `hasMore`, `canLoadMore`, `label`, `retryLabel`.                                        |
+| `actions`  | `canRefresh`, `canLoadMore`, `canMarkAllRead`, `canRetryList`, `canRetryPage`, `busy`.                                |
+| `live`     | The polite announcement of the current counter.                                                                       |
+
+Rules the derivation guarantees:
+
+1. **Server order, grouped by day.** Rows follow `state.order`; consecutive rows of
+   one calendar day (in `timeZone`) form an `InboxGroupView`, labelled `Today`,
+   `Yesterday`, or the formatted day. Nothing is re-sorted, and the row's
+   `timeLabel` is relative inside today and an absolute short date otherwise.
+2. **The optimistic layer shows.** A row's `read`/`unread` are the effective
+   values — a queued operation wins over the confirmed one — and `pending`/
+   `unknown` describe that operation. A rolled-back operation is simply absent
+   again, and the confirmed row shows through.
+3. **The counter is server data.** `unreadCount` stays `null` and `known` stays
+   `false` until the server reports a number, and `label` stays `null` until then.
+   It is independent of the loaded page and of the filter: a page of ten rows
+   under a counter of 27 is a valid view.
+4. **Action availability is conservative.** `canMarkAllRead` needs a known
+   non-zero counter, no queued individual operation and no bulk operation in
+   flight; `canLoadMore` needs a next cursor, a ready list and no page already
+   loading.
+5. **Time is injected.** Relative labels and the day groups come from the
+   `InboxTimeAnchor`; nothing in the derivation calls `Date.now()`.
+6. **The view is memoized by revision.** `inboxViewKey(stateRevision,
+configRevision, time)` is `stateRevision | configRevision | today | minuteBucket`,
+   and `createInboxViewMemo()` returns the very same object for the same key, so a
+   binding can compare the snapshot by reference.
+
+Configuration (`resolveInboxConfig`) validates `locale` and `timeZone` against
+`Intl` and falls back to deterministic constants (`en`, `UTC`) instead of the
+browser, so the same input always resolves the same way — the property SSR and
+hydration rely on — and merges per-key message overrides over the built-in
+dictionaries. `InboxMessages` holds plain text with `{placeholder}` markers and no
+markup; `selectPlural()` chooses the form with `Intl.PluralRules`.
+
+Stable classes are listed by `IL_CLASS` and keyed by `IlClassSlot`. State a
+stylesheet reacts to is written as a `data-il-*` attribute (`data-il-unread`,
+`data-il-pending`, `data-il-unknown`, `data-il-status`, `data-il-empty`) rather
+than as modifier classes; trigger, panel, filter and counter slots arrive with
+their components in later iterations.
 
 ## 3. Data model and adapter
 
@@ -477,7 +539,6 @@ Accessibility ships with each UI iteration and is audited again in Iteration 18.
 These are intentionally unresolved and are decided by the iteration that needs
 them:
 
-- The precise cache key of the derived view model (Iteration 3).
 - Whether the mock adapter should generate a fixed data set or resolve data from
   a seed that a test can control (Iteration 4).
 - Whether preloading data for server rendering needs a serialisable seed beyond
@@ -495,3 +556,9 @@ Resolved in Iteration 2: the snapshot stays `{ revision, state, view }` and the
 their server order, one status per load, the counter with its honest `null`, the
 optimistic layer and the request generations. The `view` half is fixed by the
 derived view model in Iteration 3.
+
+Resolved in Iteration 3: the `view` half is `InboxView<TData>` (section 2), and
+its cache key is `stateRevision | configRevision | today | minuteBucket`, built by
+`inboxViewKey()`. The day and the minute are the only parts of the time reference
+the rendered view depends on — relative labels change when the minute does and
+when the day rolls over, and nothing else moves with `nowMs`.
