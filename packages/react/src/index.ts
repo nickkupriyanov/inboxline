@@ -1,13 +1,20 @@
 /**
  * @nickkupriyanov/inboxline-react — the React binding of Inboxline.
  *
- * Provider, hooks and the bell/feed layouts. It drives the single core
- * controller through `useSyncExternalStore` and never repeats domain logic.
+ * The provider owns one core controller and exposes it through
+ * `useSyncExternalStore`; the hooks below are the whole headless surface. The
+ * ready-made bell and feed layouts arrive in the following iterations and use
+ * exactly these values, so a custom UI is never a second-class consumer.
  *
- * Temporary empty entry point. Iteration 0 only proves that the package builds,
- * resolves the core workspace dependency and ships both module formats; the
- * provider and hooks land in Iteration 12. Nothing declared here is a public
- * API yet.
+ * ```tsx
+ * import { InboxProvider, useInboxFlow, useInboxUI } from '@nickkupriyanov/inboxline-react';
+ * ```
+ *
+ * The stylesheet is published next to this entry as
+ * `@nickkupriyanov/inboxline-react/styles.css`.
  */
 
-export {};
+export { InboxProvider } from './provider';
+export { useInboxFlow, useInboxUI } from './context';
+export type { InboxFlow, InboxProviderProps, InboxTheme, InboxUI } from './types';
+export type * from '@nickkupriyanov/inboxline-core';

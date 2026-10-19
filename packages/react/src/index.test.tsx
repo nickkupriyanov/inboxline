@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import * as react from './index';
 
+/**
+ * The entry point of the React binding: the provider and the two headless
+ * hooks, and nothing that duplicates domain logic. The list is deliberate — a
+ * new runtime export has to be added here, which is the moment to ask whether it
+ * belongs in the surface at all.
+ */
+const EXPECTED_EXPORTS: readonly string[] = ['InboxProvider', 'useInboxFlow', 'useInboxUI'];
+
 describe('@nickkupriyanov/inboxline-react entry point', () => {
   it('imports in a DOM environment without touching the DOM at import time', () => {
     expect(react).toBeTypeOf('object');
   });
 
-  it('exports nothing yet — the provider arrives in Iteration 12', () => {
-    expect(Object.keys(react)).toEqual([]);
+  it('exports exactly the provider and the headless hooks', () => {
+    expect(Object.keys(react).sort()).toEqual([...EXPECTED_EXPORTS].sort());
   });
 });

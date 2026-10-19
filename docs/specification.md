@@ -5,7 +5,7 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 11 — shared styles and the reference map.** The
+> **Current status: Iteration 12 — the React provider and the headless API.** The
 > notification, context, filter, page, adapter and error types are implemented in
 > `@nickkupriyanov/inboxline-core` (`packages/core/src/`), next to the RFC 3339
 > timestamp and calendar-day helpers, the boundary checks an adapter wraps its
@@ -17,8 +17,9 @@ work; this file owns the descriptions.
 > the separate browser entry point `@nickkupriyanov/inboxline-core/dom` with its
 > focus, size and available-area helpers, and the authored stylesheet published
 > as `@nickkupriyanov/inboxline-core/styles.css` with a copy on the React entry.
-> The React binding itself is marked **Planned** and is not part of the available
-> API.
+> `@nickkupriyanov/inboxline-react` now publishes `InboxProvider`,
+> `useInboxFlow()` and `useInboxUI()`; the ready-made feed and bell layouts are
+> still **Planned**.
 
 ## 1. Packages and entry points
 
@@ -27,7 +28,7 @@ work; this file owns the descriptions.
 | `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 9) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model, the deterministic mock adapter and the controller lifecycle, filters, paging, mutations and external invalidations. |
 | `@nickkupriyanov/inboxline-core/dom`         | Browser helpers (Iteration 10)                           | Focus around a non-modal panel, element size observation and the viewport-constrained area around an anchor; no React, no import-time browser access.                                                                                                                                |
 | `@nickkupriyanov/inboxline-core/styles.css`  | Stylesheet (Iteration 11)                                | Plain CSS: `--il-*` design tokens for both themes, a scoped base layer, the feed root, rows and list states. Built into `dist/inboxline.css`.                                                                                                                                        |
-| `@nickkupriyanov/inboxline-react`            | Empty placeholder                                        | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                                                                                                                                  |
+| `@nickkupriyanov/inboxline-react`            | Provider and headless hooks (Iteration 12)               | `InboxProvider`, `useInboxFlow()`, `useInboxUI()`, the provider props and the flow/UI types. Ready-made layouts — Iteration 13 onwards.                                                                                                                                              |
 | `@nickkupriyanov/inboxline-react/styles.css` | Copy of the core stylesheet (Iteration 11)               | Byte copy of `dist/inboxline.css`, made by the React post-build step.                                                                                                                                                                                                                |
 | `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                                                                          |
 
@@ -917,24 +918,88 @@ const { unreadCount } = assertInboxUnreadCount(await counterResponse.json());
 
 ## 4. React binding
 
-**Planned (Iteration 12).**
+**Implemented in Iteration 12** (`packages/react/src/`). The package publishes
+three runtime exports and the types below; the ready-made feed and bell arrive in
+Iterations 13 to 16 and use exactly this surface.
 
-- The React package subscribes to the core with `useSyncExternalStore` and
-  duplicates no domain logic.
-- One provider serves the bell and the feed together; independent providers and
-  different `context.key` values stay isolated.
-- Opening the panel, portalling, positioning and focus belong to the UI layer.
-- Controlled values follow `value`/`defaultValue`/`on*Change`: `open`/`defaultOpen`/
-  `onOpenChange` and `filter`/`defaultFilter`/`onFilterChange`. The mode is fixed
-  when the instance is created, and an external update does not echo a change
-  event back.
-- The notification list and the shared counter are server data; no second,
-  parallel controlled model of that data is added without a separate decision.
-- Replaceable parts keep the prepared handlers, classes and `aria-*` attributes.
-  Backend HTML strings are never injected with `dangerouslySetInnerHTML`.
-- The activation callback is called `onNotificationClick`, so it cannot be
-  confused with opening the panel. `onOpen` from earlier sketches is not a
-  published contract.
+| Export          | Purpose                                                                                         |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| `InboxProvider` | Owns one core controller, starts and stops it, and supplies the flow and UI contexts.           |
+| `useInboxFlow`  | The headless flow: `{ snapshot, actions }` from the nearest provider.                           |
+| `useInboxUI`    | Presentation values and the controlled UI state: theme, locale, copy, filter, open and setters. |
+
+The provider props are `adapter`, `context`, `config`, `clock`, `theme`, the
+controlled pairs `filter`/`defaultFilter`/`onFilterChange` and
+`open`/`defaultOpen`/`onOpenChange`, `onNotificationClick`, `onError` and
+`children`. `InboxFlow<TData, TContextData>` and `InboxUI<TData>` are public
+types; the domain types are re-exported from the core so a consumer needs one
+import.
+
+### Lifecycle
+
+- The provider creates exactly one controller during its first render. Creating a
+  controller has no side effects, so this is safe under Strict Mode.
+- A single effect keeps the adapter, context and configuration in step with the
+  props on every render. The controller compares them structurally: an equal
+  adapter reference, an equal context key and an equal resolved configuration do
+  nothing. Replacing `context.data` under the same key updates the following
+  requests without reloading the open list; a different key resets the scope;
+  another adapter reloads from the replacement.
+- A second effect calls `start()` after mounting and `stop()` on unmount. A
+  Strict Mode double mount therefore leaves one active adapter subscription, and
+  a late answer of a stopped or replaced source is discarded by the controller.
+- Callbacks are read from the latest props on every call. A re-render with a new
+  `onError` or `onNotificationClick` never recreates the controller, and an
+  exception inside a callback stays contained in the core.
+- `useSyncExternalStore(controller.subscribe, controller.getSnapshot,
+controller.getSnapshot)` is the only subscription. Both hooks under one
+  provider receive the same snapshot object; two providers own two controllers
+  even when they receive the same adapter.
+- The binding does not schedule `refreshTime()` itself yet. Relative labels are
+  refreshed when the application calls the action; a minute ticker is part of the
+  ready-made layouts.
+
+### Controlled and uncontrolled UI values
+
+Two values are presentation state, not server data:
+
+- `filter` narrows the list. The core still owns the filter it actually loaded,
+  so `useInboxUI().filter` reports the applied value, not the requested one.
+- `open` describes the bell panel. It never reaches the core: opening, focus,
+  portalling and positioning belong to the UI layer.
+
+Both follow the same rules:
+
+1. Passing `filter` (or `open`) fixes that value in **controlled** mode when the
+   provider is created. Passing only `defaultFilter` (or `defaultOpen`) seeds an
+   **uncontrolled** value. Passing both warns in development; the controlled
+   value wins.
+2. In controlled mode `setFilter()`/`setOpen()` call `onFilterChange`/
+   `onOpenChange` and wait for the prop. The core changes only when the
+   application accepts the value, and an external prop update never echoes a
+   change event back. Asking for the value that is already accepted is a no-op.
+3. In uncontrolled mode the provider applies the change itself and then reports
+   it through the same callback.
+4. The mode is fixed at creation. A controlled value that becomes `undefined`
+   keeps its last accepted value; a controlled value that appears after an
+   uncontrolled start is ignored; changing a `default*` value after creation does
+   not re-initialise anything. A mode change and a controlled/`default*` pair
+   passed together warn once in development (`[inboxline]`); production keeps the
+   initial mode and does nothing.
+5. The notification list and the shared counter are deliberately not
+   controllable: they are server data owned by the controller.
+
+The provider-level `open` value describes the one bell of that provider. Two
+bells need two providers; the feed can share either provider and its counter.
+
+### Headless playground
+
+`apps/playground/` is a minimal Vite application over the package sources. It
+renders two custom views — a counter and a list — under one provider, shows a
+second provider with a different context and controlled filter/open values, and
+simulates an external event through `addNotification()` + `invalidate()`. It is
+started with `pnpm dev` and built with `pnpm build:playground`; it is not a
+published package and contains no UI from the library yet.
 
 ## 5. Visual language
 
@@ -1103,3 +1168,15 @@ panel, filters, counter and replaceable parts stay absent until they have a
 component. Contrast is recalculated from the tokens in `styles.test.ts`, with
 the measured focus-ring and dark-caption adjustments documented in
 `visual-reference.md`; a browser measurement remains part of the visual review.
+
+Resolved in Iteration 12: the React provider owns one controller and exposes two
+headless hooks. Server data stays under the controller; `filter` and `open` are
+the only controlled React values, fixed in mode when the provider is created.
+`useInboxUI().filter` reports the filter actually loaded, so a controlled
+application that has not accepted a request cannot make the list claim otherwise.
+The provider-level `open` belongs to the one bell of that scope; a second bell
+needs a second provider, while any number of feeds can share the counter. A
+development-only warning names each mode change and each `default*`/controlled
+pair passed together; production keeps the initial mode and the last accepted
+value. Configuration and callback props are re-supplied on every render and
+compared by the core, so changing them never recreates the controller.

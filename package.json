@@ -9,6 +9,9 @@
   },
   "scripts": {
     "build": "pnpm --filter @nickkupriyanov/inboxline-core build && pnpm --filter @nickkupriyanov/inboxline-react build",
+    "build:playground": "pnpm --filter @nickkupriyanov/inboxline-playground build",
+    "dev": "pnpm --filter @nickkupriyanov/inboxline-playground dev",
+    "preview": "pnpm --filter @nickkupriyanov/inboxline-playground preview",
     "test": "pnpm -r test",
     "test:watch": "pnpm --filter @nickkupriyanov/inboxline-react test:watch",
     "typecheck": "pnpm -r typecheck",

@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["vite/client"],
+    "paths": {
+      "@nickkupriyanov/inboxline-react": ["../../packages/react/src/index.ts"],
+      "@nickkupriyanov/inboxline-core": ["../../packages/core/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}

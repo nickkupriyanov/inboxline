@@ -10,7 +10,11 @@ export default defineConfig({
   dts: true,
   sourcemap: true,
   clean: true,
-  treeshake: true,
+  // Kept off so `'use client'` survives: the tree-shaking pass reads the
+  // generated bundle and drops a module-level directive banner, which would
+  // make the published entry unusable in a React Server Components tree.
+  // Consumers bundle the ESM output themselves, so nothing is lost here.
+  treeshake: false,
   splitting: false,
   minify: false,
   target: 'es2021',
