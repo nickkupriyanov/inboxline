@@ -5,7 +5,7 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 5 — controller lifecycle and the first load.** The
+> **Current status: Iteration 6 — filters and controller paging.** The
 > notification, context, filter, page, adapter and error types are implemented in
 > `@nickkupriyanov/inboxline-core` (`packages/core/src/`), next to the RFC 3339
 > timestamp and calendar-day helpers, the boundary checks an adapter wraps its
@@ -13,20 +13,20 @@ work; this file owns the descriptions.
 > configuration with its `en`/`ru` copy and plural rules, the stable class slots,
 > the pure `deriveInboxView()` with its snapshot memo, `createMockAdapter()` with
 > its simulator controls, and `createInboxController()` with its lifecycle,
-> first-page and counter loads. Filters, paging, mutations and invalidation
-> subscriptions still belong to Iterations 6–9, and the React binding is marked
+> first-page, counter, filter and paging loads. Mutations and invalidation
+> subscriptions still belong to Iterations 7–9, and the React binding is marked
 > **Planned** and is not part of the available API.
 
 ## 1. Packages and entry points
 
-| Entry point                                  | State                                                    | Content                                                                                                                                                                                                                       |
-| -------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 5) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model, the deterministic mock adapter and the controller lifecycle. |
-| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                                            | Browser helpers (focus, size observation, available area) — Iteration 10.                                                                                                                                                     |
-| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                                            | Authored stylesheet — Iteration 11.                                                                                                                                                                                           |
-| `@nickkupriyanov/inboxline-react`            | Empty placeholder                                        | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                                                                           |
-| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                                            | Copy of the core stylesheet — Iteration 11.                                                                                                                                                                                   |
-| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                   |
+| Entry point                                  | State                                                    | Content                                                                                                                                                                                                                                           |
+| -------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 6) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model, the deterministic mock adapter and the controller lifecycle, filters and paging. |
+| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                                            | Browser helpers (focus, size observation, available area) — Iteration 10.                                                                                                                                                                         |
+| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                                            | Authored stylesheet — Iteration 11.                                                                                                                                                                                                               |
+| `@nickkupriyanov/inboxline-react`            | Empty placeholder                                        | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                                                                                               |
+| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                                            | Copy of the core stylesheet — Iteration 11.                                                                                                                                                                                                       |
+| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                                       |
 
 The core publishes values from `./adapter`, `./classNames`, `./config`,
 `./context`, `./controller`, `./derive`, `./errors`, `./i18n`, `./mock`,
@@ -49,7 +49,7 @@ public slot type.
 
 ## 2. Controller and snapshot
 
-**Implemented in Iteration 5** (`packages/core/src/controller.ts`).
+**Implemented in Iterations 5–6** (`packages/core/src/controller.ts`).
 `createInboxController({ adapter, context?, filter?, config?, clock?, callbacks? })`
 owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
 (`start`/`stop`), `refreshTime()`, `updateConfig()` and `actions`.
@@ -71,10 +71,28 @@ owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
 - `refresh()` reloads the first page and the counter together. It keeps the
   currently shown rows until the new first page arrives, and a failure keeps
   them while the error is recorded and reported. `retry()` repeats only the loads
-  that are in the error state, leaving a successful list or counter untouched.
+  that are in the error state, leaving a successful list or counter untouched. A
+  failed next page is retried from the same cursor; when the first page itself
+  failed, its successful retry replaces the chain instead of racing a page of
+  the old one.
 - The list and the counter are independent: each has its own status, error and
   request generation, so either can fail while the other succeeds. Until the
   server reports a counter it stays `null`, never a confirmed zero.
+- `setFilter(filter)` validates the value, ignores the filter that is already
+  active and otherwise abandons the rows, the cursor and the in-flight requests
+  of the previous one. When started, it loads the first page of the new filter;
+  the counter and its request are untouched, because the counter belongs to the
+  whole context. A filter chosen before `start()` is used by the first load.
+- `loadMore()` appends the next page of the current filter and context. It does
+  nothing without a cursor, before the first page is ready or while another page
+  is already loading, so two rapid calls produce one request. An empty page is a
+  valid answer; a repeated cursor — the one just requested or any earlier cursor
+  of the chain — ends the list instead of creating a cycle. A failed page keeps
+  the shown rows and the cursor, so calling `loadMore()` again repeats that same
+  page.
+- A first page always supersedes the chain: `start`, `refresh`, `setFilter`, a
+  context change and an adapter replacement abort an in-flight page load, and its
+  late answer can neither append rows nor replace the new first page.
 - `setContext(context)` resets the rows, counter, paging and optimistic layer
   when the key changes and starts a fresh load if the controller is started.
   Replacing `context.data` under the same key only updates the object used by
@@ -91,9 +109,9 @@ owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
   after the snapshot already holds them. An exception thrown by a callback is
   contained: it neither rejects the action nor triggers a second request, and a
   cancelled request never reaches `onError`.
-- `actions` is the fixed vocabulary below. In Iteration 5 `refresh`, `retry`,
-  `setContext` and `setAdapter` are live; `setFilter`/`loadMore` are no-ops until
-  Iteration 6, `setRead` until Iteration 7, `markAllRead` until Iteration 8 and
+- `actions` is the fixed vocabulary below. In Iteration 6 `refresh`, `retry`,
+  `setFilter`, `loadMore`, `setContext` and `setAdapter` are live; `setRead`
+  remains a no-op until Iteration 7, `markAllRead` until Iteration 8 and
   `reconcile` until the unknown-outcome work of Iterations 7–9.
 
 ```ts
@@ -193,23 +211,53 @@ and through the snapshot, so a binding never needs a `.catch()` to keep a consol
 clean. The actions that belong to later iterations are present but deliberately
 inert until then (see the list above the action table).
 
-| Action                | Meaning                                                                                                        |
-| --------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `setFilter(filter)`   | Selects the list filter. The global counter is not affected.                                                   |
-| `refresh()`           | Reloads the first page and the counter, replacing the loaded list.                                             |
-| `retry()`             | Repeats exactly the loads that failed; with nothing failed it does nothing.                                    |
-| `loadMore()`          | Appends the next page of the current filter and context, when there is one.                                    |
-| `setRead(id, read)`   | Sets a desired read state; the change is queued until the server confirms it. `read` is a state, not a toggle. |
-| `markAllRead()`       | Marks every notification of the context read on the server, including the ones never loaded.                   |
-| `reconcile()`         | Reads the server state again after an unknown outcome, without retrying the operation.                         |
-| `setContext(context)` | Replaces the context; in-flight work of the previous one is abandoned.                                         |
-| `setAdapter(adapter)` | Replaces the adapter; in-flight work of the previous one is abandoned.                                         |
+| Action                | Meaning                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `setFilter(filter)`   | Selects the list filter. The global counter is not affected.                                                            |
+| `refresh()`           | Reloads the first page and the counter, replacing the loaded list.                                                      |
+| `retry()`             | Repeats exactly the loads that failed, including a failed page at the same cursor; with nothing failed it does nothing. |
+| `loadMore()`          | Appends the next page of the current filter and context; one request at a time, and a repeated cursor ends the list.    |
+| `setRead(id, read)`   | Sets a desired read state; the change is queued until the server confirms it. `read` is a state, not a toggle.          |
+| `markAllRead()`       | Marks every notification of the context read on the server, including the ones never loaded.                            |
+| `reconcile()`         | Reads the server state again after an unknown outcome, without retrying the operation.                                  |
+| `setContext(context)` | Replaces the context; in-flight work of the previous one is abandoned.                                                  |
+| `setAdapter(adapter)` | Replaces the adapter; in-flight work of the previous one is abandoned.                                                  |
 
 Callbacks are `onNotificationClick(notification)` — the application navigates,
 the library never opens a link — and `onError(error)`; a cancelled request never
 reaches `onError`. The controlled UI values (`open`/`defaultOpen`/`onOpenChange`,
 `filter`/`defaultFilter`/`onFilterChange`) belong to the binding and are
 described in section 4; they reach the core through these actions.
+
+### Filters and paging
+
+**Implemented in Iteration 6** (`packages/core/src/controller.ts`). The reducer
+already owned the transitions; this iteration made them reachable from the
+controller and closed the races between a first page and an appended one.
+
+- **The filter is a list filter.** `setFilter` keeps `unreadCount`,
+  `countStatus` and an in-flight counter request. It replaces `byId`, `order`,
+  `nextCursor`, `listStatus`, `pageStatus` and their errors, then loads the first
+  page of the new filter when the controller is started. The generation tokens of
+  both list requests move, so an answer for the previous filter is dropped even
+  if an adapter ignores its `AbortSignal`.
+- **One page request at a time.** `loadMore` is allowed only with a next cursor,
+  a ready first page and no page already loading. A second call resolves
+  immediately without calling the adapter. A failed page stays retryable because
+  `nextCursor` and every shown row are kept.
+- **Cursor cycles end the list.** The controller remembers the cursors requested
+  in the current chain; a response whose `nextCursor` was already requested is
+  stored with `nextCursor: null`. The reducer's own rule — a cursor equal to the
+  one just requested ends the list — remains the second line of defence. The
+  requested-cursor set starts over with every first page, so a new chain is not
+  constrained by the old one.
+- **Merging stays additive.** Overlapping pages keep the first occurrence of an
+  id, its place and its content. An empty page with a fresh cursor is accepted
+  and paging continues; an empty page with `null` ends the list.
+- **Refresh wins over paging.** A refresh (and every other first-page load)
+  aborts the page in flight. It keeps the current rows until its own first page
+  succeeds, then replaces the whole chain, including the old cursor. A failed
+  refresh keeps both the rows and the cursor it was refreshing.
 
 ### The derived view model
 

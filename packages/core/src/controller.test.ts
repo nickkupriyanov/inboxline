@@ -18,9 +18,11 @@ import type {
 import { DEFAULT_INBOX_CONTEXT } from './context';
 import { createInboxController } from './controller';
 import { InboxError } from './errors';
+import { createMockAdapter } from './mock';
 import type {
   InboxClock,
   InboxContext,
+  InboxFilter,
   InboxNotification,
   InboxPage,
   InboxUnreadCount,
@@ -204,6 +206,7 @@ describe('creation and snapshot', () => {
     const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
 
     await controller.actions.refresh();
+    await controller.actions.loadMore();
     controller.actions.setContext({ key: 'user-2' });
 
     expect(script.calls.lists).toHaveLength(0);
@@ -664,6 +667,355 @@ describe('context and adapter changes', () => {
     expect(() =>
       createInboxController({ adapter: script.adapter, context: { key: '' } as InboxContext }),
     ).toThrow(RangeError);
+  });
+});
+
+describe('filtering and paging', () => {
+  it('appends pages in the server order, folds duplicates and stops at the end', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a'), note('b')], 'cursor-1'));
+    script.counts[0].resolve({ unreadCount: 27 });
+    await flush();
+
+    expect(controller.getSnapshot().view.page.canLoadMore).toBe(true);
+
+    const more = controller.actions.loadMore();
+    expect(script.calls.lists).toHaveLength(2);
+    expect(script.calls.lists[1]?.cursor).toBe('cursor-1');
+    expect(script.calls.lists[1]?.filter).toBe('all');
+    expect(controller.getSnapshot().state.pageStatus).toBe('loading');
+
+    script.lists[1].resolve(page([note('b'), note('c')], 'cursor-2'));
+    await more;
+
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['a', 'b', 'c']);
+    expect(snapshot.state.nextCursor).toBe('cursor-2');
+    expect(snapshot.state.pageStatus).toBe('idle');
+    expect(snapshot.view.list.count).toBe(3);
+    // Three loaded rows under a counter of 27: the two numbers are independent.
+    expect(snapshot.state.unreadCount).toBe(27);
+    expect(snapshot.view.page.hasMore).toBe(true);
+
+    const last = controller.actions.loadMore();
+    expect(script.calls.lists[2]?.cursor).toBe('cursor-2');
+    script.lists[2].resolve(page([note('d')], null));
+    await last;
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['a', 'b', 'c', 'd']);
+    expect(snapshot.state.nextCursor).toBeNull();
+    expect(snapshot.view.page.hasMore).toBe(false);
+    expect(snapshot.view.page.canLoadMore).toBe(false);
+
+    await controller.actions.loadMore();
+    expect(script.calls.lists).toHaveLength(3);
+  });
+
+  it('runs one page request at a time and treats an empty last page as the end', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a')], 'cursor-1'));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    const first = controller.actions.loadMore();
+    const second = controller.actions.loadMore();
+    expect(script.calls.lists).toHaveLength(2);
+    await expect(second).resolves.toBeUndefined();
+
+    script.lists[1].resolve(page([], null));
+    await first;
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['a']);
+    expect(snapshot.state.nextCursor).toBeNull();
+    expect(snapshot.state.pageStatus).toBe('idle');
+    expect(snapshot.state.listStatus).toBe('ready');
+    expect(snapshot.view.page.canLoadMore).toBe(false);
+
+    await controller.actions.loadMore();
+    expect(script.calls.lists).toHaveLength(2);
+  });
+
+  it('keeps the shown rows and retries the same page after a failure', async () => {
+    const onError = vi.fn();
+    const script = createScriptedAdapter();
+    const controller = createInboxController({
+      adapter: script.adapter,
+      clock: clockAt(NOW),
+      callbacks: { onError },
+    });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a')], 'cursor-1'));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    const failed = controller.actions.loadMore();
+    script.lists[1].reject(
+      new InboxError({ code: 'ADAPTER_FAILURE', message: 'The page is down' }),
+    );
+    await failed;
+
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['a']);
+    expect(snapshot.state.nextCursor).toBe('cursor-1');
+    expect(snapshot.state.listStatus).toBe('ready');
+    expect(snapshot.state.pageStatus).toBe('error');
+    expect(snapshot.state.pageError?.code).toBe('ADAPTER_FAILURE');
+    expect(snapshot.view.actions.canRetryPage).toBe(true);
+    expect(onError).toHaveBeenCalledTimes(1);
+
+    const retry = controller.actions.loadMore();
+    expect(script.calls.lists).toHaveLength(3);
+    expect(script.calls.lists[2]?.cursor).toBe('cursor-1');
+
+    script.lists[2].resolve(page([note('b')], null));
+    await retry;
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['a', 'b']);
+    expect(snapshot.state.nextCursor).toBeNull();
+    expect(snapshot.state.pageStatus).toBe('idle');
+    expect(snapshot.state.pageError).toBeNull();
+  });
+
+  it('repeats a failed page through retry() without reloading the list or counter', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a')], 'cursor-1'));
+    script.counts[0].resolve({ unreadCount: 3 });
+    await flush();
+
+    const failed = controller.actions.loadMore();
+    script.lists[1].reject(new InboxError({ code: 'ADAPTER_FAILURE', message: 'No page' }));
+    await failed;
+
+    const retrying = controller.actions.retry();
+    expect(script.calls.lists).toHaveLength(3);
+    expect(script.calls.lists[2]?.cursor).toBe('cursor-1');
+    expect(script.calls.counts).toHaveLength(1);
+
+    script.lists[2].resolve(page([note('b')], null));
+    await retrying;
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['a', 'b']);
+    expect(snapshot.state.unreadCount).toBe(3);
+    expect(snapshot.state.pageStatus).toBe('idle');
+  });
+
+  it('ends the chain when a page repeats a cursor it has already requested', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a')], 'cursor-1'));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    const second = controller.actions.loadMore();
+    script.lists[1].resolve(page([note('b')], 'cursor-2'));
+    await second;
+
+    const third = controller.actions.loadMore();
+    expect(script.calls.lists[2]?.cursor).toBe('cursor-2');
+    // `cursor-1` was requested earlier in this chain, so accepting it again
+    // would let a buggy adapter walk in a cycle.
+    script.lists[2].resolve(page([note('c')], 'cursor-1'));
+    await third;
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['a', 'b', 'c']);
+    expect(snapshot.state.nextCursor).toBeNull();
+    expect(snapshot.view.page.canLoadMore).toBe(false);
+
+    await controller.actions.loadMore();
+    expect(script.calls.lists).toHaveLength(3);
+  });
+
+  it('replaces the rows and the cursor on a filter change but keeps the counter', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a'), note('b', { read: true })], 'cursor-1'));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    controller.actions.setFilter('unread');
+
+    expect(script.calls.lists).toHaveLength(2);
+    expect(script.calls.lists[1]?.filter).toBe('unread');
+    expect(script.calls.lists[1]?.cursor).toBeNull();
+    expect(script.calls.counts).toHaveLength(1);
+
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.state.filter).toBe('unread');
+    expect(snapshot.state.order).toEqual([]);
+    expect(snapshot.state.nextCursor).toBeNull();
+    expect(snapshot.state.listStatus).toBe('loading');
+    expect(snapshot.state.unreadCount).toBe(1);
+    expect(snapshot.state.countStatus).toBe('ready');
+    expect(snapshot.view.settings.filter).toBe('unread');
+    expect(snapshot.view.list.empty).toBe(false);
+
+    script.lists[1].resolve(page([note('c')], 'cursor-2'));
+    await flush();
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['c']);
+    expect(snapshot.state.nextCursor).toBe('cursor-2');
+    expect(snapshot.state.unreadCount).toBe(1);
+    expect(snapshot.view.list.empty).toBe(false);
+  });
+
+  it('drops the answers of filters the visitor has already left', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    controller.actions.setFilter('unread');
+    controller.actions.setFilter('all');
+
+    expect(script.calls.lists.map((call) => call.filter)).toEqual(['all', 'unread', 'all']);
+    expect(script.calls.lists[0]?.signal.aborted).toBe(true);
+    expect(script.calls.lists[1]?.signal.aborted).toBe(true);
+    expect(script.calls.lists[2]?.signal.aborted).toBe(false);
+
+    script.lists[0].resolve(page([note('stale-all')], 'stale-1'));
+    script.lists[1].resolve(page([note('stale-unread')], 'stale-2'));
+    script.lists[2].resolve(page([note('fresh')], null));
+    script.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.filter).toBe('all');
+    expect(snapshot.state.order).toEqual(['fresh']);
+    expect(snapshot.state.byId['stale-all']).toBeUndefined();
+    expect(snapshot.state.byId['stale-unread']).toBeUndefined();
+    expect(snapshot.state.unreadCount).toBe(2);
+  });
+
+  it('abandons the page of the filter that is being replaced', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a')], 'cursor-1'));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    const more = controller.actions.loadMore();
+    controller.actions.setFilter('unread');
+
+    expect(script.calls.lists[1]?.signal.aborted).toBe(true);
+    expect(script.calls.lists[2]?.filter).toBe('unread');
+
+    script.lists[1].resolve(page([note('stale-page')], 'cursor-9'));
+    script.lists[2].resolve(page([note('fresh-unread')], null));
+    await more;
+    await flush();
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['fresh-unread']);
+    expect(snapshot.state.byId['stale-page']).toBeUndefined();
+    expect(snapshot.state.nextCursor).toBeNull();
+  });
+
+  it('lets a refresh replace the chain while a page is loading', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    controller.start();
+    script.lists[0].resolve(page([note('a')], 'cursor-1'));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    const more = controller.actions.loadMore();
+    const refreshing = controller.actions.refresh();
+    expect(script.calls.lists[1]?.signal.aborted).toBe(true);
+
+    script.lists[1].resolve(page([note('stale-page')], 'cursor-9'));
+    script.lists[2].resolve(page([note('fresh')], null));
+    script.counts[1].resolve({ unreadCount: 1 });
+    await Promise.all([more, refreshing]);
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['fresh']);
+    expect(snapshot.state.byId['stale-page']).toBeUndefined();
+    expect(snapshot.state.nextCursor).toBeNull();
+    expect(snapshot.state.pageStatus).toBe('idle');
+  });
+
+  it('applies a filter chosen before start and rejects an unknown one', () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+
+    expect(() => controller.actions.setFilter('later' as InboxFilter)).toThrow(RangeError);
+
+    controller.actions.setFilter('unread');
+    expect(script.calls.lists).toHaveLength(0);
+    expect(controller.getSnapshot().state.filter).toBe('unread');
+
+    controller.start();
+    expect(script.calls.lists[0]?.filter).toBe('unread');
+  });
+
+  it('pages through the mock feed and recovers from a failed second page', async () => {
+    const clock = clockAt(NOW);
+    const notifications = [
+      note('n1', { createdAt: '2026-10-18T12:05:00Z' }),
+      note('n2', { createdAt: '2026-10-18T12:04:00Z' }),
+      note('n3', { createdAt: '2026-10-18T12:03:00Z' }),
+      note('n4', { createdAt: '2026-10-18T12:02:00Z' }),
+      note('n5', { createdAt: '2026-10-18T12:01:00Z' }),
+    ];
+    const adapter = createMockAdapter({
+      clock,
+      pageSize: 2,
+      contexts: [{ context: DEFAULT_INBOX_CONTEXT, notifications }],
+    });
+    const controller = createInboxController({ adapter, clock });
+
+    controller.start();
+    await flush();
+
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['n1', 'n2']);
+    expect(snapshot.state.unreadCount).toBe(5);
+    expect(snapshot.view.page.canLoadMore).toBe(true);
+
+    await controller.actions.loadMore();
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['n1', 'n2', 'n3', 'n4']);
+    expect(snapshot.state.nextCursor).not.toBeNull();
+    expect(snapshot.state.unreadCount).toBe(5);
+
+    const cursor = snapshot.state.nextCursor;
+    adapter.failNext('getNotifications');
+    await controller.actions.loadMore();
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['n1', 'n2', 'n3', 'n4']);
+    expect(snapshot.state.nextCursor).toBe(cursor);
+    expect(snapshot.state.pageStatus).toBe('error');
+
+    await controller.actions.loadMore();
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['n1', 'n2', 'n3', 'n4', 'n5']);
+    expect(snapshot.state.nextCursor).toBeNull();
+    expect(snapshot.state.pageStatus).toBe('idle');
+    expect(snapshot.state.listStatus).toBe('ready');
+    expect(snapshot.state.unreadCount).toBe(5);
   });
 });
 

@@ -18,6 +18,11 @@
  * - **The list and the counter are independent.** They load in parallel, fail
  *   separately and keep their own statuses, because a page of ten rows under a
  *   counter of 27 is a normal answer and either call may fail on its own.
+ * - **One chain at a time.** A first page (a start, a refresh, another filter or
+ *   another context) supersedes the pages appended before it, and a page load
+ *   supersedes the next one only after it has settled. Duplicate rows are folded
+ *   into the first occurrence, and a cursor the chain has already requested ends
+ *   the list instead of looping.
  * - **Time is injected.** The snapshot is derived from the injected clock on
  *   every read; `refreshTime()` lets a binding announce that the wall clock
  *   moved, and the derivation is memoised by the minute so repeated reads in the
@@ -83,26 +88,40 @@ export interface InboxSnapshot<TData = unknown> {
  * through the snapshot, so a binding never has to attach a `.catch()` to keep a
  * console clean.
  *
- * Iteration 5 implements the lifecycle actions: `refresh()`, `retry()`,
- * `setContext()` and `setAdapter()`. The remaining methods are part of the fixed
- * vocabulary but are still no-ops until their iteration: `setFilter`/`loadMore`
- * in Iteration 6, `setRead` in Iteration 7, `markAllRead` in Iteration 8 and
+ * Iterations 5 and 6 implement the lifecycle and paging actions: `refresh()`,
+ * `retry()`, `setFilter()`, `loadMore()`, `setContext()` and `setAdapter()`. The
+ * remaining methods are part of the fixed vocabulary but are still no-ops until
+ * their iteration: `setRead` in Iteration 7, `markAllRead` in Iteration 8 and
  * `reconcile` together with the unknown-outcome handling of Iterations 7–9.
  *
  * @typeParam TData — Application data carried by every notification.
  * @typeParam TContextData — Application data carried by the context.
  */
 export interface InboxActions<TData = unknown, TContextData = unknown> {
-  /** Selects the filter of the list. The unread counter is not affected. */
+  /**
+   * Selects the filter of the list. The unread counter is not affected.
+   *
+   * A different filter abandons the request and the rows of the previous one and,
+   * when the controller is started, loads its first page. Choosing the filter
+   * that is already active does nothing.
+   */
   setFilter(filter: InboxFilter): void;
   /** Reloads the first page and the counter, replacing the loaded list. */
   refresh(): Promise<void>;
   /**
    * Repeats exactly the loads that failed, leaving the successful ones alone.
-   * When nothing failed it does nothing and resolves.
+   * A failed next page is retried from the same cursor; when the first page
+   * itself failed, its successful retry replaces the chain instead. When nothing
+   * failed it does nothing and resolves.
    */
   retry(): Promise<void>;
-  /** Appends the next page of the current filter and context, when there is one. */
+  /**
+   * Appends the next page of the current filter and context, when there is one.
+   *
+   * A second call while a page is already loading is ignored and resolves. When
+   * the previous page failed, this requests that same page again; the rows that
+   * are already shown stay in place.
+   */
   loadMore(): Promise<void>;
   /**
    * Sets one notification to the desired read state and keeps it in the queue
@@ -290,7 +309,16 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
   let started = false;
   let nextToken = 0;
   let activeList: ActiveRequest | null = null;
+  let activePage: ActiveRequest | null = null;
   let activeCount: ActiveRequest | null = null;
+  /**
+   * The cursors of the current chain that have already been requested.
+   *
+   * A correct adapter never repeats a cursor for the same sequence, but the core
+   * does not have to trust that: a cursor seen before is treated as the end of
+   * the list. The chain starts over with every first page.
+   */
+  let requestedCursors = new Set<string>();
 
   function notify(): void {
     for (const listener of [...listeners]) listener();
@@ -331,8 +359,20 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
   function cancelLoads(): void {
     activeList?.controller.abort();
     activeList = null;
+    activePage?.controller.abort();
+    activePage = null;
     activeCount?.controller.abort();
     activeCount = null;
+  }
+
+  function cancelList(): void {
+    activeList?.controller.abort();
+    activeList = null;
+  }
+
+  function cancelPage(): void {
+    activePage?.controller.abort();
+    activePage = null;
   }
 
   /* -- snapshot ------------------------------------------------------------- */
@@ -392,6 +432,41 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     }
   }
 
+  async function runPage(request: ActiveRequest, cursor: string): Promise<void> {
+    try {
+      const page = assertInboxPage(
+        await adapter.getNotifications({
+          context,
+          filter: state.filter,
+          cursor,
+          signal: request.controller.signal,
+        }),
+      ) as InboxPage<TData>;
+
+      if (activePage !== request) return;
+
+      // A cursor this chain has already asked for would start a cycle: the rows
+      // of the answer are still merged, but the list honestly ends there.
+      const nextCursor =
+        page.nextCursor !== null && requestedCursors.has(page.nextCursor) ? null : page.nextCursor;
+      apply({
+        type: 'pageLoaded',
+        token: request.token,
+        page: nextCursor === page.nextCursor ? page : { ...page, nextCursor },
+      });
+    } catch (error) {
+      if (activePage !== request || request.controller.signal.aborted || isAbortError(error)) {
+        return;
+      }
+
+      const failure = toInboxError(error, 'ADAPTER_FAILURE', 'load');
+      apply({ type: 'pageFailed', token: request.token, error: failure });
+      reportError(failure);
+    } finally {
+      if (activePage === request) activePage = null;
+    }
+  }
+
   async function runCount(request: ActiveRequest): Promise<void> {
     try {
       const { unreadCount } = assertInboxUnreadCount(
@@ -419,10 +494,13 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
   function loadList(): Promise<void> {
     if (!started) return Promise.resolve();
 
-    // A refresh supersedes the previous first page; the old request is aborted
-    // and, even if its adapter ignores the signal, its answer is dropped by the
-    // identity check in `runList`.
-    activeList?.controller.abort();
+    // A first page supersedes both the previous first page and the page that was
+    // being appended. The old requests are aborted and, even if the adapter
+    // ignores the signal, their answers are dropped by the identity checks.
+    cancelList();
+    cancelPage();
+    requestedCursors = new Set<string>();
+
     const request: ActiveRequest = {
       token: (nextToken += 1),
       controller: new AbortController(),
@@ -432,6 +510,26 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
 
     if (activeList !== request || !started) return Promise.resolve();
     return runList(request);
+  }
+
+  function loadPage(): Promise<void> {
+    if (!started) return Promise.resolve();
+    if (state.listStatus !== 'ready') return Promise.resolve();
+    if (state.pageStatus === 'loading') return Promise.resolve();
+
+    const cursor = state.nextCursor;
+    if (cursor === null) return Promise.resolve();
+
+    const request: ActiveRequest = {
+      token: (nextToken += 1),
+      controller: new AbortController(),
+    };
+    activePage = request;
+    requestedCursors.add(cursor);
+    apply({ type: 'pageLoading', token: request.token });
+
+    if (activePage !== request || !started) return Promise.resolve();
+    return runPage(request, cursor);
   }
 
   function loadCount(): Promise<void> {
@@ -460,8 +558,14 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     if (!started) return;
     // Opposite of `refresh`: only the failed loads are repeated, so a successful
     // counter is not asked again just because the list failed (and vice versa).
+    // A failed first page replaces the chain, so retrying the page of the old
+    // chain at the same time would race with that replacement.
     const pending: Promise<void>[] = [];
-    if (state.listStatus === 'error') pending.push(loadList());
+    if (state.listStatus === 'error') {
+      pending.push(loadList());
+    } else if (state.pageStatus === 'error') {
+      pending.push(loadPage());
+    }
     if (state.countStatus === 'error') pending.push(loadCount());
     await Promise.all(pending);
   }
@@ -469,8 +573,19 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
   /* -- the actions ---------------------------------------------------------- */
 
   const actions: InboxActions<TData, TContextData> = {
-    setFilter(_filter) {
-      // Iteration 6 owns the filter transition and the request it starts.
+    setFilter(filter) {
+      requireFilter(filter);
+      if (filter === state.filter) return;
+
+      // The rows, the cursor and both list requests belong to the filter the
+      // visitor has left. The counter does not: it describes the whole context,
+      // so its value and its in-flight request are left alone.
+      cancelList();
+      cancelPage();
+      requestedCursors = new Set<string>();
+      apply({ type: 'setFilter', filter });
+
+      if (started) void loadList();
     },
 
     async refresh() {
@@ -482,7 +597,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     },
 
     async loadMore() {
-      // Iteration 6 owns paging.
+      await loadPage();
     },
 
     async setRead(_id, _read) {
