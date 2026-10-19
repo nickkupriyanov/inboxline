@@ -5,25 +5,25 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 9 — external updates and reconciliation.** The
+> **Current status: Iteration 10 — DOM utilities.** The
 > notification, context, filter, page, adapter and error types are implemented in
 > `@nickkupriyanov/inboxline-core` (`packages/core/src/`), next to the RFC 3339
 > timestamp and calendar-day helpers, the boundary checks an adapter wraps its
 > payloads in, the pure reducer with its initial state, the resolved
 > configuration with its `en`/`ru` copy and plural rules, the stable class slots,
 > the pure `deriveInboxView()` with its snapshot memo, `createMockAdapter()` with
-> its simulator controls, and `createInboxController()` with its lifecycle,
-> first-page, counter, filter, paging, mutation and external-update behaviour —
-> including the server-side bulk operation and the optional invalidation
-> subscription. The React binding is marked **Planned** and is not part of the
-> available API.
+> its simulator controls, `createInboxController()` with its lifecycle,
+> first-page, counter, filter, paging, mutation and external-update behaviour,
+> and the separate browser entry point `@nickkupriyanov/inboxline-core/dom` with
+> its focus, size and available-area helpers. The React binding is marked
+> **Planned** and is not part of the available API.
 
 ## 1. Packages and entry points
 
 | Entry point                                  | State                                                    | Content                                                                                                                                                                                                                                                                              |
 | -------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 9) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model, the deterministic mock adapter and the controller lifecycle, filters, paging, mutations and external invalidations. |
-| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                                            | Browser helpers (focus, size observation, available area) — Iteration 10.                                                                                                                                                                                                            |
+| `@nickkupriyanov/inboxline-core/dom`         | Browser helpers (Iteration 10)                           | Focus around a non-modal panel, element size observation and the viewport-constrained area around an anchor; no React, no import-time browser access.                                                                                                                                |
 | `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                                            | Authored stylesheet — Iteration 11.                                                                                                                                                                                                                                                  |
 | `@nickkupriyanov/inboxline-react`            | Empty placeholder                                        | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                                                                                                                                  |
 | `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                                            | Copy of the core stylesheet — Iteration 11.                                                                                                                                                                                                                                          |
@@ -31,21 +31,68 @@ work; this file owns the descriptions.
 
 The core publishes values from `./adapter`, `./classNames`, `./config`,
 `./context`, `./controller`, `./derive`, `./errors`, `./i18n`, `./mock`,
-`./reducer` and `./time`; `./types` is a type-only module. Modules that belong to
-later iterations — `dom` and the `styles/` directory — do not exist yet, and
-`index.test.ts` fails when an undeclared runtime export appears.
+`./reducer` and `./time`; `./types` is a type-only module. The separate `./dom`
+entry publishes the browser helpers. The `styles/` directory does not exist until
+Iteration 11, and each entry point has a test that fails when an undeclared
+runtime export appears.
 
 Rules that hold for every entry point:
 
 - The core is React-free and DOM-free. Browser objects are touched only inside
   called functions, never while a module is being imported.
-- `inboxline-core` is safe to import in Node and during server rendering.
+- `inboxline-core` is safe to import in Node and during server rendering; so is
+  `inboxline-core/dom`, which reads neither `window` nor `document` until one of
+  its functions is called.
 - No entry point has a third-party runtime dependency. Motion is an optional
   peer of the React binding and lives behind its own subpath.
 
 Prefixes are reserved project-wide: `il-*` for classes, `--il-*` for CSS custom
 properties, `data-il-*` for DOM state attributes, and `IlClassSlot` for the
 public slot type.
+
+### DOM helpers
+
+**Implemented in Iteration 10** (`packages/core/src/dom/`). The subpath exists
+for the binding, not as a second UI layer: it measures and moves focus, and the
+UI layer decides what to do with the result.
+
+| Export                    | Purpose                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `focusableWithin`         | The elements inside a container that can take focus right now, in document order.                                               |
+| `focusFirstWithin`        | Puts focus on the first such element, falling back to a focusable container; returns the element focused or `null`.             |
+| `captureFocus`            | Remembers the focused element before a panel opens.                                                                             |
+| `restoreFocus`            | Returns focus to a remembered element if it is still connected; returns whether focus moved.                                    |
+| `measureSize`             | The border-box size of an element, or `{ width: 0, height: 0 }` when there is no element.                                       |
+| `observeSize`             | Reports a size now and on changes; `ResizeObserver` where available, the window resize event otherwise, nothing on a server.    |
+| `measureAvailableArea`    | The anchor rectangle, the layout viewport and the free space on four sides with a margin subtracted; `null` without a viewport. |
+| `observeAvailableArea`    | Reports that area now and after scroll, resize or an anchor size change, without repeating an identical measurement.            |
+| `DEFAULT_VIEWPORT_MARGIN` | The default `8` px gap used by `measureAvailableArea` and `observeAvailableArea`.                                               |
+
+Rules the DOM entry point guarantees:
+
+1. **No import-time host access.** Importing `inboxline-core/dom` in Node reads
+   neither `window` nor `document`; a caller that never invokes a function sees
+   no browser access at all.
+2. **No focus trap.** The bell panel is a non-modal dialog, so the helpers never
+   intercept `Tab` or `Escape`. They answer “where should focus go now” and
+   “where should it return”; the binding decides when restoring focus is polite
+   and never steals focus from an element the visitor clicked.
+3. **Every subscription is removable and repeatable.** A remover clears the
+   listeners and disconnects the observer; calling it twice is safe, and
+   subscribing again starts from a fresh measurement. Several anchors can be
+   observed independently.
+4. **Missing APIs degrade, they do not throw.** Without `ResizeObserver` the
+   size and area observers use the window resize event; without a host they
+   report once (`null` for an area) and watch nothing.
+5. **Coordinates are viewport-relative.** `AvailableArea` is meant for
+   `position: fixed` and matches `getBoundingClientRect()`. It uses the layout
+   viewport (`documentElement.clientWidth`/`clientHeight`, falling back to
+   `window.innerWidth`/`innerHeight`), not the visual viewport, so browser zoom
+   and on-screen keyboards remain the UI layer's concern.
+6. **Duplicates are not reported.** `observeAvailableArea` compares the anchor
+   rectangle, the viewport and the margin, and skips a listener call when the
+   result would be equal. A scroll that does not move the anchor therefore does
+   not cause a render.
 
 ## 2. Controller and snapshot
 
@@ -951,3 +998,12 @@ event is treated as stale rather than trusted, and a failed invalidation-driven
 read is surfaced once instead of being retried in a loop. A subscription failure
 is reported with phase `load` and retried by the next `refresh()`; transport
 reconnection stays the application's responsibility.
+
+Resolved in Iteration 10: the DOM entry point measures, it does not place. The
+available area is viewport-relative for `position: fixed`, uses the layout
+viewport and clamps free space at zero, while choosing a side and aligning an edge
+belong to the binding. Importing the subpath touches no host object; a missing
+`ResizeObserver`, `window` or `document` degrades to a single measurement or a
+no-op remover instead of an exception. There is no focus trap because the panel
+is non-modal; `captureFocus`/`restoreFocus` only remember and return focus, and
+the binding decides whether returning it would steal focus from a click outside.

@@ -13,7 +13,8 @@
  * stable class slots, `deriveInboxView()` with its memo, `createMockAdapter()`
  * with its scenario controls, and `createInboxController()` with its first-page,
  * counter, filter, paging, individual read-status, bulk mark-all and external
- * invalidation lifecycle.
+ * invalidation lifecycle. Iteration 10 adds the separate `inboxline-core/dom`
+ * entry next to this one; it is deliberately not re-exported here.
  */
 
 export * from './adapter';
