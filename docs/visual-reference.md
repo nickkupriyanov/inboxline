@@ -157,6 +157,9 @@ map between Inboxline and the chapters of the reference stylesheets:
 | `root`             | `.sn-root` / `.sl-root`              | Surface, width and container.                 |
 | `header`           | `.sl-header`                         | Two-line rhythm is not used yet.              |
 | `heading`          | `.sl-title`                          | 17 px, 650, ellipsis.                         |
+| `filters`          | `.sl-tabs`                           | Segmented pill around two native buttons.     |
+| `filter`           | `.sl-tab`                            | 12.5 px, selected state from `aria-pressed`.  |
+| `updates`          | `.sl-secondary-button`               | Full-width accent-soft acknowledgement.       |
 | `list`             | `.sn-queue-list`                     | Scrolls only in the popover.                  |
 | `group`            | day groups — new                     | One day of rows.                              |
 | `groupLabel`       | `.sl-weekday` / `.sn-queue-count`    | 11.5 px, uppercase, subtle.                   |
@@ -183,6 +186,7 @@ The stylesheet reads these states:
 | `data-il-theme="light"`    | The light palette; no system-preference switch.                       |
 | `data-il-layout="popover"` | 400 px width, capped list and panel shadow.                           |
 | `data-il-layout="feed"`    | 800 px width; the list grows with its rows.                           |
+| `data-il-filter="…"`       | The applied filter, available to consumer styles.                     |
 | `data-il-unread="true"`    | Unread surface, hover surface and visible marker.                     |
 | `data-il-pending="true"`   | `cursor: progress` and a pulsing marker; the text keeps its contrast. |
 | `data-il-unknown="true"`   | Amber inset ring and amber meta text; paired with a textual status.   |

@@ -58,8 +58,9 @@
 
 .il-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px 10px;
   min-width: 0;
   padding: 2px 2px 0;
 }
@@ -74,6 +75,91 @@
   color: var(--il-text);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* Filters ------------------------------------------------------------------ */
+
+/*
+ * The filter control is a small segmented pill. `aria-pressed` is the state the
+ * stylesheet reads, so the visual selection and the state a screen reader
+ * announces can never drift apart. The group itself is a native `role="group"`
+ * with an accessible name; no ARIA tablist is involved.
+ */
+.il-filters {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  margin-left: auto;
+  padding: 3px;
+  background: var(--il-panel);
+  border: 1px solid var(--il-border);
+  border-radius: var(--il-radius-pill);
+}
+
+.il-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--il-text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--il-radius-pill);
+  cursor: pointer;
+  transition:
+    color var(--il-duration-fast) var(--il-ease-standard),
+    background var(--il-duration-fast) var(--il-ease-standard);
+}
+
+.il-filter:hover {
+  color: var(--il-text);
+  background: var(--il-control-hover);
+}
+
+.il-filter:active {
+  background: var(--il-row-press);
+}
+
+.il-filter[aria-pressed='true'] {
+  color: var(--il-accent-ink);
+  background: var(--il-accent-soft);
+}
+
+/*
+ * “Show updates” is the explicit acknowledgement of an external invalidation.
+ * It is a full-width action so it reads as a banner rather than a filter.
+ */
+.il-updates {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--il-accent-ink);
+  background: var(--il-accent-soft);
+  border: 1px solid var(--il-accent-soft-strong);
+  border-radius: var(--il-radius-pill);
+  cursor: pointer;
+  transition:
+    background var(--il-duration-fast) var(--il-ease-standard),
+    transform var(--il-duration-fast) var(--il-ease-soft);
+}
+
+.il-updates:hover {
+  color: var(--il-text);
+  background: var(--il-accent-soft-strong);
+}
+
+.il-updates:active {
+  transform: scale(0.99);
 }
 
 /* The list and its day groups --------------------------------------------- */
@@ -250,6 +336,18 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* Initials and the fallback glyph are centred in the same tile. */
+.il-item-avatar > span,
+.il-item-icon > svg {
+  display: block;
+  line-height: 1;
+}
+
+.il-item-icon > svg {
+  width: 18px;
+  height: 18px;
 }
 
 .il-item-content {
@@ -493,6 +591,15 @@ a.il-item-title {
 @container inboxline (max-width: 379px) {
   .il-heading {
     font-size: 16px;
+  }
+
+  .il-filters {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .il-filter {
+    flex: 1 1 0;
   }
 
   .il-item {

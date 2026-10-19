@@ -1,10 +1,10 @@
 /**
- * The minimal headless playground.
+ * The ready-made feed playground.
  *
- * It intentionally renders no library components: this iteration proves that one
- * provider can drive several custom views from one controller, and that separate
- * providers stay isolated. The ready-made feed arrives in the next iteration and
- * will replace the list markup below without touching the core.
+ * Iteration 13 renders the real `<Inbox>` composition: the library owns the
+ * header, filters, day groups, rows, paging and states, while the counter card
+ * beside it stays headless to show that both read one controller. Separate
+ * providers still stay isolated.
  */
 import { useState } from 'react';
 import {
@@ -13,7 +13,7 @@ import {
   type InboxContext,
   type InboxNotification,
 } from '@nickkupriyanov/inboxline-core';
-import { InboxProvider, useInboxFlow, useInboxUI } from '@nickkupriyanov/inboxline-react';
+import { Inbox, InboxProvider, useInboxFlow, useInboxUI } from '@nickkupriyanov/inboxline-react';
 
 /* -------------------------------------------------------------------------- */
 /*  Fixtures                                                                   */
@@ -95,8 +95,9 @@ function CounterCard({ title }: { title: string }) {
         {counter.label ?? ui.messages.countUnknownLabel}
       </p>
       <p className="pg-meta">
-        filter: <code>{ui.filter}</code> · panel: <code>{ui.open ? 'open' : 'closed'}</code> ·
-        theme: <code>{ui.theme}</code>
+        A custom headless view over the same controller as the feed. filter:{' '}
+        <code>{ui.filter}</code> · panel: <code>{ui.open ? 'open' : 'closed'}</code> · theme:{' '}
+        <code>{ui.theme}</code>
       </p>
       <div className="pg-row">
         <button type="button" onClick={() => ui.setOpen(!ui.open)}>
@@ -106,115 +107,6 @@ function CounterCard({ title }: { title: string }) {
           {ui.filter === 'all' ? 'Only unread' : 'Show all'}
         </button>
       </div>
-    </article>
-  );
-}
-
-function HeadlessFeed({ title }: { title: string }) {
-  const { snapshot, actions } = useInboxFlow();
-  const ui = useInboxUI();
-  const view = snapshot.view;
-  const firstId = view.list.items[0]?.id;
-
-  return (
-    <article className="pg-card pg-feed">
-      <header className="pg-feed-header">
-        <h3>{title}</h3>
-        <span className="pg-meta">{view.list.count} loaded</span>
-      </header>
-
-      <div className="pg-row" role="group" aria-label="Filter notifications">
-        <button
-          type="button"
-          aria-pressed={ui.filter === 'all'}
-          onClick={() => ui.setFilter('all')}
-        >
-          All
-        </button>
-        <button
-          type="button"
-          aria-pressed={ui.filter === 'unread'}
-          onClick={() => ui.setFilter('unread')}
-        >
-          Unread
-        </button>
-      </div>
-
-      {view.updates.available ? (
-        <button type="button" className="pg-updates" onClick={() => void actions.showUpdates()}>
-          {view.updates.label}
-        </button>
-      ) : null}
-
-      {view.list.error ? (
-        <div className="pg-error" role="alert">
-          <p>{view.list.error}</p>
-          <button type="button" onClick={() => void actions.retry()}>
-            Retry
-          </button>
-        </div>
-      ) : null}
-
-      {view.list.loading && view.list.items.length === 0 ? (
-        <p className="pg-meta">{view.list.loadingLabel}</p>
-      ) : null}
-
-      {view.list.empty && !view.list.loading ? (
-        <p className="pg-meta">{view.list.emptyLabel}</p>
-      ) : null}
-
-      <ul className="pg-list" aria-label={view.list.label}>
-        {view.list.items.map((item) => (
-          <li key={item.id} className="pg-item" data-unread={item.unread || undefined}>
-            <div className="pg-item-text">
-              <strong>{item.title}</strong>
-              {item.body ? <span>{item.body}</span> : null}
-              <small>
-                {item.timeLabel}
-                {item.unread ? ` · ${ui.messages.unreadMarkerLabel}` : ''}
-                {item.pending ? ' · saving' : ''}
-                {item.unknown ? ' · will reconcile' : ''}
-              </small>
-            </div>
-          </li>
-        ))}
-      </ul>
-
-      <div className="pg-row">
-        <button
-          type="button"
-          disabled={!view.page.canLoadMore}
-          onClick={() => void actions.loadMore()}
-        >
-          {view.page.label}
-        </button>
-        <button
-          type="button"
-          disabled={!view.actions.canMarkAllRead}
-          onClick={() => void actions.markAllRead()}
-        >
-          {ui.messages.markAllReadLabel}
-        </button>
-        <button
-          type="button"
-          disabled={!firstId || view.actions.busy}
-          onClick={() => void actions.setRead(firstId ?? '', true)}
-        >
-          Mark first read
-        </button>
-        <button type="button" onClick={() => void actions.refresh()}>
-          Refresh
-        </button>
-      </div>
-
-      {view.page.error ? (
-        <div className="pg-error" role="alert">
-          <p>{view.page.error}</p>
-          <button type="button" onClick={() => void actions.loadMore()}>
-            {view.page.retryLabel}
-          </button>
-        </div>
-      ) : null}
     </article>
   );
 }
@@ -234,11 +126,12 @@ export function App() {
     <main className={`pg-page pg-page-${theme}`}>
       <header className="pg-header">
         <div>
-          <p className="pg-eyebrow">Iteration 12 · headless</p>
-          <h1>Inboxline provider</h1>
+          <p className="pg-eyebrow">Iteration 13 · ready-made feed</p>
+          <h1>Inboxline feed</h1>
           <p className="pg-lead">
-            One controller per provider, read through <code>useSyncExternalStore</code>. These views
-            are deliberately custom: no library component is rendered yet.
+            The library now renders the real feed: day groups, filters, paging and every loading,
+            empty and error state. The counter card beside it is a headless view of the same
+            controller.
           </p>
         </div>
         <button
@@ -253,11 +146,12 @@ export function App() {
         <h2>One provider, two views</h2>
         <p className="pg-meta">
           The counter and the feed share one snapshot and one unread counter. Filter and panel
-          values are uncontrolled here (internal to the provider).
+          values are uncontrolled here (internal to the provider); the feed owns the visible filter
+          buttons.
         </p>
         <InboxProvider adapter={adapter} context={WORKSPACE_A} theme={theme}>
           <CounterCard title="Bell counter" />
-          <HeadlessFeed title="Feed" />
+          <Inbox />
         </InboxProvider>
         <div className="pg-row">
           <button type="button" onClick={() => simulateExternalEvent(WORKSPACE_A)}>

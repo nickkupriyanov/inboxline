@@ -14,6 +14,7 @@
  * `@nickkupriyanov/inboxline-react/styles.css`.
  */
 
+export { Inbox } from './Inbox';
 export { InboxProvider } from './provider';
 export { useInboxFlow, useInboxUI } from './context';
 export type { InboxFlow, InboxProviderProps, InboxTheme, InboxUI } from './types';

@@ -136,6 +136,11 @@ h3 {
   gap: 14px;
 }
 
+/* The library root has a fixed composition width; centre it on the demo page. */
+.pg-section > .il-root {
+  justify-self: center;
+}
+
 .pg-card {
   display: grid;
   gap: 12px;
@@ -173,81 +178,6 @@ h3 {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-}
-
-.pg-feed-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.pg-list {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.pg-item {
-  padding: 12px 14px;
-  border: 1px solid #2a2a33;
-  border-radius: 14px;
-  background: #191920;
-}
-
-.pg-page-light .pg-item {
-  border-color: #e2e2e8;
-  background: #fafafc;
-}
-
-.pg-item[data-unread] {
-  border-color: #4b2231;
-  background: #21161b;
-}
-
-.pg-page-light .pg-item[data-unread] {
-  border-color: #ffc2d3;
-  background: #fff5f8;
-}
-
-.pg-item-text {
-  display: grid;
-  gap: 3px;
-}
-
-.pg-item-text span {
-  color: #b3b3c0;
-  font-size: 13px;
-}
-
-.pg-page-light .pg-item-text span {
-  color: #5c5c68;
-}
-
-.pg-item-text small {
-  color: #9595a3;
-  font-size: 12px;
-}
-
-.pg-updates {
-  border-color: #ff215a;
-  color: #ff7aa0;
-}
-
-.pg-error {
-  display: grid;
-  gap: 8px;
-  padding: 12px 14px;
-  border: 1px solid #5a2434;
-  border-radius: 14px;
-  background: #211318;
-}
-
-.pg-error p {
-  margin: 0;
-  color: #ff9ab6;
 }
 
 @media (max-width: 520px) {

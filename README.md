@@ -12,15 +12,16 @@ Inboxline belongs to the same family as
 an explicit light theme, pink accent `#ff215a`, CSS variables instead of a
 styling framework, and a framework-free core behind a thin binding.
 
-> **Status: Iteration 12 — provider and headless API.** The framework-free core
-> is implemented: the adapter contract, reducer, derived view, deterministic mock
+> **Status: Iteration 13 — ready-made feed.** The framework-free core is
+> implemented: the adapter contract, reducer, derived view, deterministic mock
 > adapter, controller and DOM helpers. The stylesheet ships as
 > `@nickkupriyanov/inboxline-core/styles.css` with a copy on the React entry and
 > is documented in [`docs/visual-reference.md`](./docs/visual-reference.md).
-> `@nickkupriyanov/inboxline-react` publishes `InboxProvider`, `useInboxFlow()`
-> and `useInboxUI()`; the ready-made feed and bell layouts arrive in the following
-> iterations. The plan lives in [`roadmap.md`](./roadmap.md); the implemented
-> contract is recorded in [`docs/specification.md`](./docs/specification.md).
+> `@nickkupriyanov/inboxline-react` publishes `InboxProvider`, the ready-made
+> `<Inbox />` feed, `useInboxFlow()` and `useInboxUI()`; the bell layout and the
+> row actions arrive in the following iterations. The plan lives in
+> [`roadmap.md`](./roadmap.md); the implemented contract is recorded in
+> [`docs/specification.md`](./docs/specification.md).
 
 ## Packages
 
@@ -67,7 +68,7 @@ pnpm install       # install workspace dependencies
 pnpm typecheck     # tsc --noEmit in every package
 pnpm test          # vitest run in every package
 pnpm build         # build both packages with tsup
-pnpm build:playground  # build the headless Vite example
+pnpm build:playground  # build the Vite example with the ready-made feed
 pnpm dev           # run the playground on http://localhost:5173
 pnpm preview       # serve a built playground
 pnpm format        # prettier --write
@@ -91,7 +92,7 @@ inboxline/
     specification.md
     visual-reference.md
   apps/
-    playground/    headless provider example (not published)
+    playground/    ready-made feed and headless provider example (not published)
     style-stand/   static page for visual review (not published)
 ```
 

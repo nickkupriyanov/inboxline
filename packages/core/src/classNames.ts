@@ -21,8 +21,8 @@
  * | `data-il-empty="true"`             | the list          | Loaded and holding no rows under the current filter.        |
  *
  * `data-il-layout`, `data-il-theme` and `data-il-filter` describe the widget as a
- * whole and arrive with the layouts and the filter control in Iterations 13 to 15,
- * together with the trigger, panel and counter slots.
+ * whole. The feed sets all three in Iteration 13; the panel and trigger follow in
+ * Iteration 15.
  */
 import type { IlClassSlot } from './types';
 
@@ -31,6 +31,9 @@ export const IL_CLASS: Record<IlClassSlot, string> = {
   root: 'il-root',
   header: 'il-header',
   heading: 'il-heading',
+  filters: 'il-filters',
+  filter: 'il-filter',
+  updates: 'il-updates',
   list: 'il-list',
   group: 'il-group',
   groupLabel: 'il-group-label',

@@ -208,6 +208,15 @@ describe('component layer', () => {
     );
   });
 
+  it('styles the selected filter and the update banner through tokens', () => {
+    expect(inboxlineCss).toMatch(
+      /\.il-filter\[aria-pressed='true'\]\s*\{[^}]*color:\s*var\(--il-accent-ink\);[^}]*background:\s*var\(--il-accent-soft\);/,
+    );
+    expect(inboxlineCss).toMatch(
+      /\.il-updates\s*\{[^}]*color:\s*var\(--il-accent-ink\);[^}]*background:\s*var\(--il-accent-soft\);/,
+    );
+  });
+
   it('keeps focus visible and disabled state explicit', () => {
     expect(baseCss).toContain('.il-root :focus-visible');
     expect(baseCss).toContain('outline: 2px solid var(--il-focus-ring)');
@@ -380,6 +389,37 @@ describe('contrast', () => {
       );
       if (ratio < 4.5) {
         failures.push(`${theme.name} retry: ${ratio.toFixed(2)}:1 (needs 4.5:1)`);
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('keeps the selected filter and the update banner readable in both themes', () => {
+    const failures: string[] = [];
+    for (const theme of themes()) {
+      for (const surface of ['--il-surface', '--il-panel']) {
+        const background = over(
+          theme.tokens.get('--il-accent-soft') as string,
+          theme.tokens.get(surface) as string,
+        );
+        const ratio = contrast(colour(theme.tokens, '--il-accent-ink'), background);
+        if (ratio < 4.5) {
+          failures.push(
+            `${theme.name} accent text on ${surface}: ${ratio.toFixed(2)}:1 (needs 4.5:1)`,
+          );
+        }
+
+        const hoverBackground = over(
+          theme.tokens.get('--il-accent-soft-strong') as string,
+          theme.tokens.get(surface) as string,
+        );
+        const hoverRatio = contrast(colour(theme.tokens, '--il-text'), hoverBackground);
+        if (hoverRatio < 4.5) {
+          failures.push(
+            `${theme.name} update hover text on ${surface}: ${hoverRatio.toFixed(2)}:1 ` +
+              '(needs 4.5:1)',
+          );
+        }
       }
     }
     expect(failures).toEqual([]);

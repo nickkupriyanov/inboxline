@@ -918,13 +918,14 @@ const { unreadCount } = assertInboxUnreadCount(await counterResponse.json());
 
 ## 4. React binding
 
-**Implemented in Iteration 12** (`packages/react/src/`). The package publishes
-three runtime exports and the types below; the ready-made feed and bell arrive in
-Iterations 13 to 16 and use exactly this surface.
+**Implemented in Iterations 12–13** (`packages/react/src/`). The package publishes
+four runtime exports and the types below; the bell arrives in Iteration 15 and
+uses the same surface.
 
 | Export          | Purpose                                                                                         |
 | --------------- | ----------------------------------------------------------------------------------------------- |
 | `InboxProvider` | Owns one core controller, starts and stops it, and supplies the flow and UI contexts.           |
+| `Inbox`         | The ready-made feed: header, filters, day groups, rows, paging and states.                      |
 | `useInboxFlow`  | The headless flow: `{ snapshot, actions }` from the nearest provider.                           |
 | `useInboxUI`    | Presentation values and the controlled UI state: theme, locale, copy, filter, open and setters. |
 
@@ -934,6 +935,46 @@ controlled pairs `filter`/`defaultFilter`/`onFilterChange` and
 `children`. `InboxFlow<TData, TContextData>` and `InboxUI<TData>` are public
 types; the domain types are re-exported from the core so a consumer needs one
 import.
+
+### The ready-made feed
+
+`<Inbox />` renders one `layout="feed"` composition from the nearest provider. It
+is a consumer of the same public hooks a custom UI uses, not a second controller:
+every date, counter, group and availability flag comes from
+`snapshot.view`, and every request goes through `actions` or the controlled
+`setFilter`.
+
+- The root carries `data-il-layout="feed"`, `data-il-theme` and
+  `data-il-filter`. The heading and the list use `listLabel`; the filter group has
+  its own accessible name and two native buttons with `aria-pressed`.
+- Day groups are consecutive rows of one calendar day. The list itself is a
+  labelled `<ul>`; each group is a list item containing its label and a nested
+  list of notification rows. It is never presented as a menu.
+- A row shows the author avatar or the notification icon, the title, the optional
+  body and the time. A broken avatar falls back to the author's initials; a broken
+  icon falls back to the bell glyph; a row with neither starts its text at the
+  first grid column. Missing optional data is omitted rather than rendered empty.
+- Unread is carried by the row surface, the marker and a visually hidden “Unread”
+  label. The time stays tabular and the title and body wrap instead of overflowing;
+  the feed has no fixed height.
+- Loading the first page shows three skeleton rows with a status label. The loaded
+  empty state uses the filter-specific copy. A failed first page keeps any existing
+  rows, shows an alert with a retry, and a failed next page is a smaller strip above
+  the unchanged rows.
+- The next page is a native button with an explicit “Show more” label; it is
+  disabled while that page loads and disappears at the end of the list. An external
+  invalidation appears as an explicit “Show updates” button and does not reorder
+  the open list before it is used.
+- The counter is announced through the hidden polite live region. The feed does
+  not duplicate the global counter in its header; the bell trigger owns the badge
+  in Iteration 15.
+- Filters, paging and updates work in both controlled and uncontrolled modes
+  because they call `useInboxUI().setFilter`; the feed never decides the filter on
+  its own.
+
+Row activation, read/unread buttons, “Mark all as read” and the pending/unknown
+row status belong to Iteration 14, the bell panel to Iteration 15, and replaceable
+parts to Iteration 16. Until then a row is a presentational list item.
 
 ### Lifecycle
 
@@ -992,14 +1033,16 @@ Both follow the same rules:
 The provider-level `open` value describes the one bell of that provider. Two
 bells need two providers; the feed can share either provider and its counter.
 
-### Headless playground
+### Playground
 
-`apps/playground/` is a minimal Vite application over the package sources. It
-renders two custom views — a counter and a list — under one provider, shows a
-second provider with a different context and controlled filter/open values, and
-simulates an external event through `addNotification()` + `invalidate()`. It is
-started with `pnpm dev` and built with `pnpm build:playground`; it is not a
-published package and contains no UI from the library yet.
+`apps/playground/` is a Vite application over the package sources. Its first
+section renders the ready-made `<Inbox />` next to a headless counter card under
+one provider, so the shared controller is visible in the same snapshot. The
+second pair of providers shows a different context with controlled filter and
+open values, and a button simulates an external event through
+`addNotification()` + `invalidate()`. It imports the published stylesheet path
+through a source alias. It is started with `pnpm dev` and built with
+`pnpm build:playground`; it is not a published package.
 
 ## 5. Visual language
 
@@ -1180,3 +1223,15 @@ development-only warning names each mode change and each `default*`/controlled
 pair passed together; production keeps the initial mode and the last accepted
 value. Configuration and callback props are re-supplied on every render and
 compared by the core, so changing them never recreates the controller.
+
+Resolved in Iteration 13: the ready-made feed is a consumer of the public hooks,
+not a second controller. It renders one labelled list of day groups, uses native
+buttons for the filters and paging, and takes every label, row and availability
+flag from `snapshot.view`. The feed sets `data-il-layout`, `data-il-theme` and
+`data-il-filter` on the root; the selected filter is read from `aria-pressed`, so
+the visual selection and the announced state cannot drift. A broken avatar falls
+back to initials and a broken icon to an inline glyph, while a row with neither
+renders no leading tile. The global counter is announced by the feed's live region
+but is not repeated in the header; the bell badge owns that presentation in
+Iteration 15. Row activation, read actions and the pending/unknown row status
+remain absent until Iteration 14.

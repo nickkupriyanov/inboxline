@@ -271,6 +271,12 @@ export interface InboxMessages {
   retryLabel: string;
   /** Loads the next page. */
   loadMoreLabel: string;
+  /** Accessible name of the filter group. */
+  filtersLabel: string;
+  /** Filter that shows every notification. */
+  filterAllLabel: string;
+  /** Filter that shows only unread notifications. */
+  filterUnreadLabel: string;
   /** Loads the first page after an external invalidation, for example “Show updates”. */
   showUpdatesLabel: string;
   /** Marks every notification of the context read on the server. */
@@ -299,13 +305,17 @@ export interface InboxMessages {
  * A slot is an extension point, not a DOM structure: the base class from
  * `IL_CLASS` marks the part, and the `classNames` prop adds the consumer's own
  * class alongside it rather than instead of it. The set stays aligned with the
- * parts the derived view actually describes — trigger, panel, filter and counter
- * slots arrive together with their components in Iterations 13 to 16.
+ * parts the derived view actually describes — the feed and its filters arrive in
+ * Iteration 13, while the trigger, panel and replaceable parts follow their
+ * components in Iterations 15 and 16.
  */
 export type IlClassSlot =
   | 'root'
   | 'header'
   | 'heading'
+  | 'filters'
+  | 'filter'
+  | 'updates'
   | 'list'
   | 'group'
   | 'groupLabel'

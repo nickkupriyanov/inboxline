@@ -8,6 +8,12 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: [
+      // The stylesheet subpath resolves to the authored files, so the dev server
+      // hot-reloads the library CSS exactly as a consumer imports the built one.
+      {
+        find: '@nickkupriyanov/inboxline-react/styles.css',
+        replacement: source('../../packages/core/src/styles/index.css'),
+      },
       // The playground runs against the sources so the dev server hot-reloads
       // the library itself. A consumer imports the built packages instead.
       {
