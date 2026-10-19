@@ -5,32 +5,32 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 3 — the derived view model.** The notification,
-> context, filter, page, adapter and error types are implemented in
+> **Current status: Iteration 4 — the deterministic mock adapter.** The
+> notification, context, filter, page, adapter and error types are implemented in
 > `@nickkupriyanov/inboxline-core` (`packages/core/src/`), next to the RFC 3339
 > timestamp and calendar-day helpers, the boundary checks an adapter wraps its
 > payloads in, the pure reducer with its initial state, the resolved
 > configuration with its `en`/`ru` copy and plural rules, the stable class slots,
-> and the pure `deriveInboxView()` with its snapshot memo. Nothing runs a request
-> yet: the deterministic mock adapter arrives in Iteration 4, the controller in 5,
-> and the React binding is marked **Planned** and is not part of the available
-> API.
+> the pure `deriveInboxView()` with its snapshot memo, and `createMockAdapter()`
+> with its simulator controls. Nothing runs a controller yet: it arrives in
+> Iteration 5, and the React binding is marked **Planned** and is not part of the
+> available API.
 
 ## 1. Packages and entry points
 
-| Entry point                                  | State                                  | Content                                                                                                                                                             |
-| -------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@nickkupriyanov/inboxline-core`             | Contract, state and view (Iteration 3) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots and the derived view model. |
-| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                          | Browser helpers (focus, size observation, available area) — Iteration 10.                                                                                           |
-| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                          | Authored stylesheet — Iteration 11.                                                                                                                                 |
-| `@nickkupriyanov/inboxline-react`            | Empty placeholder                      | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                 |
-| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                          | Copy of the core stylesheet — Iteration 11.                                                                                                                         |
-| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                          | Optional Motion entry point — Iteration 17.                                                                                                                         |
+| Entry point                                  | State                                        | Content                                                                                                                                                                                             |
+| -------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@nickkupriyanov/inboxline-core`             | Contract, state, view and mock (Iteration 4) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model and the deterministic mock adapter. |
+| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                                | Browser helpers (focus, size observation, available area) — Iteration 10.                                                                                                                           |
+| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                                | Authored stylesheet — Iteration 11.                                                                                                                                                                 |
+| `@nickkupriyanov/inboxline-react`            | Empty placeholder                            | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                                                 |
+| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                                | Copy of the core stylesheet — Iteration 11.                                                                                                                                                         |
+| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                | Optional Motion entry point — Iteration 17.                                                                                                                                                         |
 
 The core publishes values from `./adapter`, `./classNames`, `./config`,
-`./context`, `./derive`, `./errors`, `./i18n`, `./reducer` and `./time`;
-`./types` and `./controller` are type-only modules. Modules that belong to later
-iterations — `mock`, `dom`, the controller runtime and the `styles/` directory —
+`./context`, `./derive`, `./errors`, `./i18n`, `./mock`, `./reducer` and
+`./time`; `./types` and `./controller` are type-only modules. Modules that belong
+to later iterations — `dom`, the controller runtime and the `styles/` directory —
 do not exist yet, and `index.test.ts` fails when an undeclared runtime export
 appears.
 
@@ -308,6 +308,78 @@ the payload was produced instead of somewhere inside the reducer:
 the matching predicates, for an adapter that wants to branch instead of throw.
 `data` is never inspected: it belongs to the application.
 
+### The mock adapter
+
+**Implemented in Iteration 4** (`packages/core/src/mock.ts`). `createMockAdapter()`
+returns an ordinary `InboxAdapter` backed by an in-memory server simulator, so a
+test or an example can drive the controller through the same contract without a
+network. The data is explicit: notifications come from fixtures, time comes from
+an injected `InboxClock`, and nothing is random. A context that was not seeded
+starts empty.
+
+```ts
+const adapter = createMockAdapter({
+  clock: { now: () => Date.parse('2026-10-18T13:00:00Z') },
+  pageSize: 10,
+  contexts: [{ context: { key: 'user-1' }, notifications: fixtures }],
+});
+```
+
+The simulator follows the adapter contract:
+
+- **Store per instance and per context key.** Two adapters, and two contexts of
+  one adapter, never share rows or subscribers.
+- **Deterministic order.** Rows are returned newest first; equal `createdAt`
+  values are ordered by `id` ascending. The core does not sort, so the mock
+  guarantees the same order on every call.
+- **Cursor by sort key.** `nextCursor` encodes the `createdAt` and `id` of the
+  last returned row, not an offset. A newer event or a row that disappears from
+  the unread filter therefore cannot shift the continuation, duplicate a row or
+  make paging loop. A cursor the mock did not issue is rejected with
+  `ADAPTER_FAILURE` in the `load` phase.
+- **Server counter.** `getUnreadCount` counts every unread row of the context,
+  including rows beyond the loaded pages: a page of 10 under a counter of 27 is
+  a normal answer.
+- **Explicit mutations.** `setReadStatus` sets the desired state, is idempotent
+  and confirms the row together with the counter; an unknown id is a
+  `NOT_FOUND` mutation with the `rejected` outcome. `markAllRead` takes its
+  boundary from the injected clock and marks every row with
+  `createdAt <= boundary`, including unloaded ones. Rows created after the
+  boundary stay unread, so the returned counter is not necessarily zero.
+
+The adapter also exposes controls that are not part of the adapter contract:
+
+| Control                         | Effect                                                                                       |
+| ------------------------------- | -------------------------------------------------------------------------------------------- |
+| `addNotification(context, row)` | Stores a new event without notifying subscribers. Duplicate ids and invalid rows throw.      |
+| `invalidate(context)`           | Calls the context's invalidation subscribers, modelling another client or a transport event. |
+| `failNext(operation, failure?)` | Queues one failure for the next call of one operation.                                       |
+| `clearFailures(operation?)`     | Drops the queue of one operation, or every queue.                                            |
+| `setLatency(latencyMs)`         | Replaces the delay for the following requests.                                               |
+
+`subscribe()` is always available on the mock and each call is an independent
+subscription; the returned function removes only that subscription and is safe
+to call twice. `addNotification()` does not invalidate by itself: a scenario that
+represents an external change calls `invalidate()` explicitly, so a test can
+check that the list is kept until the controller refreshes it.
+
+Latency is either one number or `(operation) => number`. Loads wait for it and
+honour their `AbortSignal`: an aborted load rejects with the contract's
+`AbortError`, never touches the store and does not consume a queued failure.
+Mutations have no signal, exactly like the contract.
+
+`failNext()` distinguishes the two mutation outcomes:
+
+- the default `outcome: 'rejected'` throws an `InboxError` and leaves the data
+  unchanged;
+- `{ outcome: 'unknown' }` throws an `InboxError` with `outcome: 'unknown'`;
+- `{ apply: true, outcome: 'unknown' }` applies the change first and then throws,
+  which is the lost response after a server operation that did happen.
+
+Loads cannot apply a change or have an unknown outcome, and a rejected mutation
+cannot be applied first; both combinations throw `RangeError` when they are
+queued.
+
 ### The error contract
 
 | Code                         | Means                                                                                  |
@@ -539,8 +611,6 @@ Accessibility ships with each UI iteration and is audited again in Iteration 18.
 These are intentionally unresolved and are decided by the iteration that needs
 them:
 
-- Whether the mock adapter should generate a fixed data set or resolve data from
-  a seed that a test can control (Iteration 4).
 - Whether preloading data for server rendering needs a serialisable seed beyond
   the controller contexts (Iteration 19).
 - How a backend that cannot report a `markAllRead` boundary should express it —
@@ -562,3 +632,8 @@ its cache key is `stateRevision | configRevision | today | minuteBucket`, built 
 `inboxViewKey()`. The day and the minute are the only parts of the time reference
 the rendered view depends on — relative labels change when the minute does and
 when the day rolls over, and nothing else moves with `nowMs`.
+
+Resolved in Iteration 4: the mock adapter does not generate a data set and has no
+seed. Every scenario supplies explicit fixtures, and time is an injected clock.
+A generator would hide the data a test asserts on, while a serialisable seed is a
+question for server rendering (Iteration 19), not for the mock.

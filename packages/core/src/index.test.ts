@@ -54,6 +54,8 @@ const EXPECTED_EXPORTS: readonly string[] = [
   'createUnknownOutcomeError',
   'isAbortError',
   'createAbortError',
+  // mock adapter
+  'createMockAdapter',
   // copy
   'defaultMessages',
   'resolveMessageLocale',
