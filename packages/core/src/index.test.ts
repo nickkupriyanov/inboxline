@@ -3,9 +3,10 @@ import * as core from './index';
 
 /**
  * The entry point of the core: the integration contract, the state machine, the
- * derived view model and the copy, and nothing that talks to a network or the
- * DOM. The list is deliberate — a new runtime export has to be added here, which
- * is the moment to ask whether it belongs in the surface of the core at all.
+ * derived view model, the controller and the copy, and nothing that talks to a
+ * network or the DOM. The list is deliberate — a new runtime export has to be
+ * added here, which is the moment to ask whether it belongs in the surface of the
+ * core at all.
  */
 const EXPECTED_EXPORTS: readonly string[] = [
   // adapter contract and boundary checks
@@ -27,6 +28,8 @@ const EXPECTED_EXPORTS: readonly string[] = [
   'isSupportedInboxLocale',
   'isSupportedInboxTimeZone',
   'resolveInboxConfig',
+  // controller
+  'createInboxController',
   // context and filter
   'DEFAULT_CONTEXT_KEY',
   'DEFAULT_INBOX_CONTEXT',
@@ -85,12 +88,12 @@ describe('@nickkupriyanov/inboxline-core entry point', () => {
     expect(typeof document).toBe('undefined');
   });
 
-  it('exports the contract, the state machine, the derived view and the copy, and nothing else', () => {
+  it('exports the contract, the state machine, the controller and the copy, and nothing else', () => {
     expect(Object.keys(core).sort()).toEqual([...EXPECTED_EXPORTS].sort());
   });
 
-  it('exports the derived view but no controller runtime yet', () => {
+  it('exports the controller runtime next to the derived view', () => {
     expect(typeof core.deriveInboxView).toBe('function');
-    expect('createInboxController' in core).toBe(false);
+    expect(typeof core.createInboxController).toBe('function');
   });
 });

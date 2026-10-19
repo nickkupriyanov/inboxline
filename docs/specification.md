@@ -5,34 +5,35 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 4 — the deterministic mock adapter.** The
+> **Current status: Iteration 5 — controller lifecycle and the first load.** The
 > notification, context, filter, page, adapter and error types are implemented in
 > `@nickkupriyanov/inboxline-core` (`packages/core/src/`), next to the RFC 3339
 > timestamp and calendar-day helpers, the boundary checks an adapter wraps its
 > payloads in, the pure reducer with its initial state, the resolved
 > configuration with its `en`/`ru` copy and plural rules, the stable class slots,
-> the pure `deriveInboxView()` with its snapshot memo, and `createMockAdapter()`
-> with its simulator controls. Nothing runs a controller yet: it arrives in
-> Iteration 5, and the React binding is marked **Planned** and is not part of the
-> available API.
+> the pure `deriveInboxView()` with its snapshot memo, `createMockAdapter()` with
+> its simulator controls, and `createInboxController()` with its lifecycle,
+> first-page and counter loads. Filters, paging, mutations and invalidation
+> subscriptions still belong to Iterations 6–9, and the React binding is marked
+> **Planned** and is not part of the available API.
 
 ## 1. Packages and entry points
 
-| Entry point                                  | State                                        | Content                                                                                                                                                                                             |
-| -------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@nickkupriyanov/inboxline-core`             | Contract, state, view and mock (Iteration 4) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model and the deterministic mock adapter. |
-| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                                | Browser helpers (focus, size observation, available area) — Iteration 10.                                                                                                                           |
-| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                                | Authored stylesheet — Iteration 11.                                                                                                                                                                 |
-| `@nickkupriyanov/inboxline-react`            | Empty placeholder                            | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                                                 |
-| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                                | Copy of the core stylesheet — Iteration 11.                                                                                                                                                         |
-| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                | Optional Motion entry point — Iteration 17.                                                                                                                                                         |
+| Entry point                                  | State                                                    | Content                                                                                                                                                                                                                       |
+| -------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 5) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model, the deterministic mock adapter and the controller lifecycle. |
+| `@nickkupriyanov/inboxline-core/dom`         | Not built yet                                            | Browser helpers (focus, size observation, available area) — Iteration 10.                                                                                                                                                     |
+| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                                            | Authored stylesheet — Iteration 11.                                                                                                                                                                                           |
+| `@nickkupriyanov/inboxline-react`            | Empty placeholder                                        | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                                                                           |
+| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                                            | Copy of the core stylesheet — Iteration 11.                                                                                                                                                                                   |
+| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                   |
 
 The core publishes values from `./adapter`, `./classNames`, `./config`,
-`./context`, `./derive`, `./errors`, `./i18n`, `./mock`, `./reducer` and
-`./time`; `./types` and `./controller` are type-only modules. Modules that belong
-to later iterations — `dom`, the controller runtime and the `styles/` directory —
-do not exist yet, and `index.test.ts` fails when an undeclared runtime export
-appears.
+`./context`, `./controller`, `./derive`, `./errors`, `./i18n`, `./mock`,
+`./reducer` and `./time`; `./types` is a type-only module. Modules that belong to
+later iterations — `dom`, the invalidation subscription and the `styles/`
+directory — do not exist yet, and `index.test.ts` fails when an undeclared
+runtime export appears.
 
 Rules that hold for every entry point:
 
@@ -48,20 +49,67 @@ public slot type.
 
 ## 2. Controller and snapshot
 
-**Planned (Iteration 5).** `createInboxController()` owns the data flow:
+**Implemented in Iteration 5** (`packages/core/src/controller.ts`).
+`createInboxController({ adapter, context?, filter?, config?, clock?, callbacks? })`
+owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
+(`start`/`stop`), `refreshTime()`, `updateConfig()` and `actions`.
 
-- It performs no requests, subscriptions or timers when it is created.
+- It performs no requests, subscriptions, timers or callbacks when it is
+  created. Reading `getSnapshot()` before `start()` is safe and describes an idle
+  inbox with an unknown counter.
 - `getSnapshot()` returns `{ revision, state, view }` and keeps returning the
-  same object until the model actually changes.
-- `subscribe(listener)` returns an unsubscribe function.
-- `start()` and `stop()` are idempotent and own every side effect: the initial
-  page and counter load, refresh, and the optional adapter invalidation
-  subscription.
-- Configuration, context and adapter can be replaced at runtime.
-- Mutations are exposed through `actions`.
-- User callbacks are invoked after the state is updated, and an exception thrown
-  by a callback never turns a successful request into a server error and never
-  triggers a second mutation.
+  same object until the state, the configuration or the rendered minute actually
+  changes. The view is memoised by
+  `inboxViewKey(stateRevision, configRevision, anchor)`, and the time anchor is
+  rebuilt from the injected clock on every read.
+- `subscribe(listener)` returns an unsubscribe function; removing the same
+  listener twice is safe.
+- `start()` is idempotent: it loads the first page and the counter in parallel.
+  `stop()` is idempotent too: it aborts the pending loads, and a late answer from
+  either of them is dropped. Starting again after a stop performs a fresh first
+  load instead of trusting the interrupted one.
+- `refresh()` reloads the first page and the counter together. It keeps the
+  currently shown rows until the new first page arrives, and a failure keeps
+  them while the error is recorded and reported. `retry()` repeats only the loads
+  that are in the error state, leaving a successful list or counter untouched.
+- The list and the counter are independent: each has its own status, error and
+  request generation, so either can fail while the other succeeds. Until the
+  server reports a counter it stays `null`, never a confirmed zero.
+- `setContext(context)` resets the rows, counter, paging and optimistic layer
+  when the key changes and starts a fresh load if the controller is started.
+  Replacing `context.data` under the same key only updates the object used by
+  the following requests — the data still belongs to the same scope.
+- `setAdapter(adapter)` ignores the same reference. A different adapter aborts
+  the in-flight work, keeps the current rows on screen and loads a new first
+  page and counter from the replacement when the controller is started.
+- `updateConfig(input)` resolves locale, time zone and message overrides and
+  bumps the snapshot only when the resolved values actually differ. It never
+  reloads server data.
+- `refreshTime()` re-reads the clock and notifies listeners when the rendered
+  minute or day changed; it never performs a request.
+- Failures are normalised with `toInboxError()` and reported through `onError`
+  after the snapshot already holds them. An exception thrown by a callback is
+  contained: it neither rejects the action nor triggers a second request, and a
+  cancelled request never reaches `onError`.
+- `actions` is the fixed vocabulary below. In Iteration 5 `refresh`, `retry`,
+  `setContext` and `setAdapter` are live; `setFilter`/`loadMore` are no-ops until
+  Iteration 6, `setRead` until Iteration 7, `markAllRead` until Iteration 8 and
+  `reconcile` until the unknown-outcome work of Iterations 7–9.
+
+```ts
+const inbox = createInboxController({
+  adapter,
+  context: { key: 'user-1' },
+  clock: { now: () => Date.now() },
+  callbacks: { onError: (error) => report(error) },
+});
+
+inbox.start();
+
+// Later, after the first page and the counter have settled:
+await inbox.actions.refresh();
+const { view } = inbox.getSnapshot();
+```
 
 The reducer and the derivation step are pure functions: time and side effects
 are injected, never read from `Date.now()` or the network inside them.
@@ -138,16 +186,18 @@ Rules the transitions guarantee:
 
 ### The action vocabulary
 
-**Fixed in Iteration 1** (`packages/core/src/controller.ts`, types only; the
-runtime arrives in Iteration 5). Every action that talks to the server resolves
-when the operation has settled, successfully or not, and never rejects: a
-failure is reported through `onError` and through the snapshot, so a binding
-never needs a `.catch()` to keep a console clean.
+**Fixed in Iteration 1, runtime from Iteration 5** (`packages/core/src/controller.ts`).
+Every action that talks to the server resolves when the operation has settled,
+successfully or not, and never rejects: a failure is reported through `onError`
+and through the snapshot, so a binding never needs a `.catch()` to keep a console
+clean. The actions that belong to later iterations are present but deliberately
+inert until then (see the list above the action table).
 
 | Action                | Meaning                                                                                                        |
 | --------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `setFilter(filter)`   | Selects the list filter. The global counter is not affected.                                                   |
 | `refresh()`           | Reloads the first page and the counter, replacing the loaded list.                                             |
+| `retry()`             | Repeats exactly the loads that failed; with nothing failed it does nothing.                                    |
 | `loadMore()`          | Appends the next page of the current filter and context, when there is one.                                    |
 | `setRead(id, read)`   | Sets a desired read state; the change is queued until the server confirms it. `read` is a state, not a toggle. |
 | `markAllRead()`       | Marks every notification of the context read on the server, including the ones never loaded.                   |
@@ -637,3 +687,13 @@ Resolved in Iteration 4: the mock adapter does not generate a data set and has n
 seed. Every scenario supplies explicit fixtures, and time is an injected clock.
 A generator would hide the data a test asserts on, while a serialisable seed is a
 question for server rendering (Iteration 19), not for the mock.
+
+Resolved in Iteration 5: `start()` always performs a fresh first-page and counter
+load, so a restart after `stop()` reconciles instead of trusting an interrupted
+request. `refresh()` repeats both loads, while `retry()` repeats only the ones in
+the error state. A controller keeps a monotonic request token in addition to the
+reducer generations, so a context change — which restarts the generations — can
+never let an answer of the previous scope match a new request. Replacing
+`context.data` under the same key updates future requests without resetting the
+data, and `getSnapshot()` reads the injected clock while `refreshTime()` is the
+explicit announcement that the rendered minute changed.
