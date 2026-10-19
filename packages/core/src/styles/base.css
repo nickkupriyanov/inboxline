@@ -1,0 +1,92 @@
+/* ==========================================================================
+   Base layer: scoped resets, utilities and the reduced-motion kill switch.
+   Nothing here reaches outside `.il-root`; the consuming application keeps its
+   own page styles, box model and focus behaviour.
+   ========================================================================== */
+
+.il-root,
+.il-root *,
+.il-root *::before,
+.il-root *::after {
+  box-sizing: border-box;
+}
+
+.il-root {
+  font-family: var(--il-font-family);
+  font-size: var(--il-font-size);
+  line-height: 1.45;
+  color: var(--il-text);
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Controls ----------------------------------------------------------------- */
+
+/*
+ * Zero specificity on purpose. A plain `.il-root button` rule outranks a class
+ * rule such as `.il-load-more` (0,1,1 against 0,1,0), so its `color: inherit`
+ * silently won over the component layer's tokens. `:where()` keeps the reset at
+ * the bottom of the cascade, where a reset belongs.
+ */
+:where(.il-root) :where(button, input, select, textarea) {
+  font: inherit;
+  color: inherit;
+}
+
+/* Focus -------------------------------------------------------------------- */
+
+.il-root :focus {
+  outline: none;
+}
+
+.il-root :focus-visible {
+  outline: 2px solid var(--il-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--il-radius-control);
+}
+
+/* Utilities ---------------------------------------------------------------- */
+
+.il-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.il-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--il-border-strong);
+  border-top-color: var(--il-accent);
+  border-radius: 50%;
+  animation: il-spin 900ms linear infinite;
+}
+
+@keyframes il-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Accessibility: honour the OS setting ------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .il-root *,
+  .il-root *::before,
+  .il-root *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -12,11 +12,14 @@ Inboxline belongs to the same family as
 an explicit light theme, pink accent `#ff215a`, CSS variables instead of a
 styling framework, and a framework-free core behind a thin binding.
 
-> **Status: project scaffold.** The repository is a working monorepo with
-> reproducible commands, but the library itself is not implemented yet. Both
-> entry points are intentionally empty placeholders, and no domain API, styles
-> or components are declared as available. The plan lives in
-> [`roadmap.md`](./roadmap.md); the decisions already made are recorded in
+> **Status: Iteration 11 — core and styles.** The framework-free core is
+> implemented: the adapter contract, reducer, derived view, deterministic mock
+> adapter, controller and DOM helpers. The stylesheet ships as
+> `@nickkupriyanov/inboxline-core/styles.css` with a copy on the React entry and
+> is documented in [`docs/visual-reference.md`](./docs/visual-reference.md). The
+> React binding itself is still a planned placeholder; UI components arrive in
+> Iterations 12 onwards. The plan lives in [`roadmap.md`](./roadmap.md); the
+> implemented contract is recorded in
 > [`docs/specification.md`](./docs/specification.md).
 
 ## Packages
@@ -67,6 +70,7 @@ pnpm build         # build both packages with tsup
 pnpm format        # prettier --write
 pnpm format:check  # prettier --check
 pnpm changeset     # describe a change for the next release
+pnpm stand         # serve the static style stand on http://localhost:4174
 ```
 
 Versions are released with Changesets. `changeset version` (or
@@ -82,6 +86,9 @@ inboxline/
     react/     @nickkupriyanov/inboxline-react
   docs/
     specification.md
+    visual-reference.md
+  apps/
+    style-stand/   static page for visual review (not published)
 ```
 
 `apps/playground`, `tools/`, Storybook and CI arrive in the iterations listed in

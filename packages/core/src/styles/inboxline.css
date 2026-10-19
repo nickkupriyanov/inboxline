@@ -1,0 +1,533 @@
+/* ==========================================================================
+   Component layer: the feed root, its header, day groups, notification rows and
+   the loading/empty/error states.
+
+   The class names are the ones in `IL_CLASS` (packages/core/src/classNames.ts).
+   State is read from the `data-il-*` attributes listed in that module, so one
+   row can be unread, pending and focused at the same time without a modifier
+   class per combination.
+
+   Trigger, panel, filters, counter and their state attributes are not here yet:
+   they arrive with their components in Iterations 13 to 16. The root only
+   reads `data-il-layout` and `data-il-theme`, which describe the widget as a
+   whole and are already part of the public naming.
+   ========================================================================== */
+
+/* Root --------------------------------------------------------------------- */
+
+.il-root {
+  /*
+   * The named container of the widget. Its inline size is the width the layout
+   * chose, so the container-query thresholds are the widths the specification
+   * names. The root itself is never styled by its own query: its width comes from
+   * `data-il-layout`, which only the component sets.
+   */
+  container-type: inline-size;
+  container-name: inboxline;
+  display: flex;
+  flex-direction: column;
+  gap: var(--il-block-gap);
+  /*
+   * The width is a definite length, not a percentage: a shrink-to-fit parent
+   * would otherwise derive it from the content and every composition would pick
+   * its own size. `max-width: 100%` still lets it fit a narrower parent.
+   */
+  width: var(--il-width-current);
+  max-width: 100%;
+  min-width: 0;
+  padding: var(--il-padding);
+  vertical-align: top;
+  background: var(--il-surface);
+  border: 1px solid var(--il-border);
+  border-radius: var(--il-radius-card);
+  box-shadow: var(--il-shadow-card);
+  /* Long notification text wraps instead of overflowing. */
+  overflow-wrap: anywhere;
+}
+
+.il-root[data-il-layout='popover'] {
+  --il-width-current: var(--il-width-panel);
+  box-shadow: var(--il-shadow-panel);
+}
+
+.il-root[data-il-layout='feed'] {
+  --il-width-current: var(--il-width-feed);
+}
+
+/* Header ------------------------------------------------------------------- */
+
+.il-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 2px 2px 0;
+}
+
+.il-heading {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--il-text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The list and its day groups --------------------------------------------- */
+
+.il-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--il-border-strong) transparent;
+}
+
+/*
+ * Only the popover caps the list. A feed is a page of its own and grows with
+ * its rows; the panel keeps the header and the footer in place while the rows
+ * scroll. The cap is a token, never a prop.
+ */
+.il-root[data-il-layout='popover'] .il-list {
+  max-height: var(--il-list-max-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 2px;
+}
+
+.il-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--il-row-gap);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Internal, not a class slot: the rows of one day inside its group. */
+.il-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--il-row-gap);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.il-group-label {
+  margin: 0;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--il-text-subtle);
+  text-transform: uppercase;
+}
+
+/* A row -------------------------------------------------------------------- */
+
+/*
+ * The row is a grid: the avatar or icon, the text column and the unread marker.
+ * The text column is the only flexible one, so a long title or body never pushes
+ * the time or the marker out of the card.
+ */
+.il-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 2px 10px;
+  min-width: 0;
+  padding: 9px 10px;
+  color: var(--il-text);
+  border-radius: var(--il-radius-control);
+  transition:
+    background var(--il-duration-fast) var(--il-ease-standard),
+    box-shadow var(--il-duration-fast) var(--il-ease-standard);
+}
+
+.il-item:hover,
+.il-item:focus-within {
+  background: var(--il-row-hover);
+}
+
+.il-item:active {
+  background: var(--il-row-press);
+}
+
+/* Unread is more than a colour: the marker and the accessible name repeat it. */
+.il-item[data-il-unread='true'] {
+  background: var(--il-unread-surface);
+}
+
+.il-item[data-il-unread='true']:hover,
+.il-item[data-il-unread='true']:focus-within {
+  background: var(--il-unread-surface-hover);
+}
+
+/*
+ * A queued or in-flight read operation. The row keeps its normal contrast; only
+ * the marker moves, so the text does not fade while the request is pending.
+ */
+.il-item[data-il-pending='true'] {
+  cursor: progress;
+}
+
+.il-item[data-il-pending='true'] .il-item-unread-marker {
+  animation: il-pulse var(--il-duration-slow) var(--il-ease-soft) infinite alternate;
+}
+
+/*
+ * The answer to the operation was lost. The inset ring is amber — not the red of
+ * a confirmed failure — and the binding pairs it with a textual status: colour
+ * is never the only signal.
+ */
+.il-item[data-il-unknown='true'] {
+  box-shadow: inset 0 0 0 1px var(--il-warning);
+}
+
+.il-item[data-il-unknown='true'] .il-item-meta {
+  color: var(--il-warning-ink);
+}
+
+.il-item[aria-disabled='true'] {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* The whole widget can be disabled without unmounting it. */
+.il-root[data-il-disabled='true'] {
+  pointer-events: none;
+}
+
+.il-root[data-il-disabled='true'] .il-header,
+.il-root[data-il-disabled='true'] .il-list {
+  opacity: 0.6;
+}
+
+/* Avatar, icon and content ------------------------------------------------- */
+
+.il-item-avatar,
+.il-item-icon {
+  display: grid;
+  place-items: center;
+  grid-column: 1;
+  grid-row: 1;
+  flex: 0 0 auto;
+  width: var(--il-avatar-size);
+  height: var(--il-avatar-size);
+  overflow: hidden;
+  border: 1px solid var(--il-border);
+}
+
+.il-item-avatar {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--il-text-muted);
+  background: var(--il-control);
+  border-radius: var(--il-radius-avatar);
+}
+
+.il-item-icon {
+  color: var(--il-accent-ink);
+  background: var(--il-accent-soft);
+  border-radius: var(--il-radius-icon);
+}
+
+.il-item-avatar > img,
+.il-item-icon > img,
+.il-item-avatar > picture img,
+.il-item-icon > picture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.il-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  grid-column: 2;
+  min-width: 0;
+}
+
+.il-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--il-text-subtle);
+}
+
+.il-item-time {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.il-item-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--il-text);
+  overflow-wrap: anywhere;
+}
+
+/* A title that is also the link into the application keeps the slot's look. */
+a.il-item-title {
+  color: inherit;
+  text-decoration: none;
+}
+
+.il-item-body {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--il-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.il-item-unread-marker {
+  align-self: center;
+  grid-column: 3;
+  width: 7px;
+  height: 7px;
+  background: var(--il-accent);
+  border-radius: var(--il-radius-avatar);
+  box-shadow: 0 0 0 3px var(--il-accent-soft);
+  opacity: 0;
+}
+
+.il-item[data-il-unread='true'] .il-item-unread-marker {
+  opacity: 1;
+}
+
+/* States ------------------------------------------------------------------- */
+
+.il-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 14px;
+  color: var(--il-text-muted);
+  text-align: center;
+  background: var(--il-panel);
+  border: 1px dashed var(--il-border-strong);
+  border-radius: var(--il-radius-panel);
+}
+
+.il-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--il-row-gap);
+  padding: 2px 0;
+}
+
+/*
+ * The skeleton rows are internal markup, not a class slot: a binding may render
+ * as many as fit its composition. The count stays out of the DOM tree for
+ * assistive technology; the loading status is announced by `.il-live` instead.
+ */
+.il-loading-row {
+  height: 52px;
+  background: linear-gradient(
+    100deg,
+    var(--il-skeleton-base) 30%,
+    var(--il-skeleton-shine) 50%,
+    var(--il-skeleton-base) 70%
+  );
+  background-size: 220% 100%;
+  border-radius: var(--il-radius-control);
+  animation: il-shimmer 1.4s linear infinite;
+}
+
+.il-loading-row:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.il-loading-row:nth-child(3) {
+  animation-delay: 90ms;
+}
+
+.il-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--il-danger-ink);
+  background: var(--il-danger-soft);
+  border: 1px solid var(--il-danger);
+  border-radius: var(--il-radius-control);
+  overflow-wrap: anywhere;
+}
+
+.il-error button {
+  margin-top: 2px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--il-danger-contrast);
+  background: var(--il-danger);
+  border: 0;
+  border-radius: var(--il-radius-pill);
+  cursor: pointer;
+  transition:
+    background var(--il-duration-fast) var(--il-ease-standard),
+    transform var(--il-duration-fast) var(--il-ease-soft);
+}
+
+.il-error button:hover {
+  background: var(--il-danger);
+  filter: brightness(1.06);
+}
+
+.il-error button:active {
+  transform: scale(0.97);
+}
+
+/* A failed next page is a smaller strip: the rows already read stay above it. */
+.il-page-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--il-danger-ink);
+  background: var(--il-danger-soft);
+  border: 1px solid var(--il-danger);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* The retry is a link-sized action inside the strip, not a second full-width
+   button: the rows above already carry the primary reading flow. */
+.il-page-error button {
+  width: auto;
+  margin-left: auto;
+  padding: 2px 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-decoration: underline;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.il-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--il-text-muted);
+  background: var(--il-control);
+  border: 1px solid var(--il-border);
+  border-radius: var(--il-radius-pill);
+  cursor: pointer;
+  transition:
+    color var(--il-duration-fast) var(--il-ease-standard),
+    background var(--il-duration-fast) var(--il-ease-standard),
+    transform var(--il-duration-fast) var(--il-ease-soft);
+}
+
+.il-load-more:hover:not(:disabled) {
+  color: var(--il-text);
+  background: var(--il-control-hover);
+}
+
+.il-load-more:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.il-load-more:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* The live region announces counter and status changes; it is never visible. */
+.il-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Narrow containers -------------------------------------------------------- */
+
+/*
+ * The root already fits 320 px because its width is capped and its grid gives
+ * the text column all remaining space. These rules only tighten the insets and
+ * the leading tile so a long title still has room at that width.
+ */
+@container inboxline (max-width: 379px) {
+  .il-heading {
+    font-size: 16px;
+  }
+
+  .il-item {
+    gap: 2px 8px;
+    padding: 8px;
+  }
+
+  .il-item-avatar,
+  .il-item-icon {
+    --il-avatar-size: 32px;
+  }
+
+  .il-item-title {
+    font-size: 13px;
+  }
+}
+
+/* Motion ------------------------------------------------------------------- */
+
+@keyframes il-shimmer {
+  from {
+    background-position: 140% 0;
+  }
+  to {
+    background-position: -40% 0;
+  }
+}
+
+@keyframes il-pulse {
+  from {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

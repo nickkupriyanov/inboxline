@@ -1,0 +1,206 @@
+/* ==========================================================================
+   Design tokens.
+
+   Dark is the default theme. Everything is a plain custom property on
+   `.il-root`, so an application can retheme the inbox by overriding a handful of
+   variables — no Tailwind, no CSS-in-JS, no build step:
+
+     .il-root { --il-accent: #ff215a; --il-surface: #101018; }
+
+   The light theme is the same set under `[data-il-theme='light']`, which the
+   binding puts on the root from the resolved theme. There is no
+   `prefers-color-scheme` rule on purpose: a theme chosen by the explicit
+   attribute is never switched by the operating system.
+
+   The values are adapted from Slotline and Soundline; the mapping and the
+   measured deviations are listed in `docs/visual-reference.md`.
+   ========================================================================== */
+
+.il-root {
+  /* Shape ------------------------------------------------------------------ */
+  --il-radius-card: 28px;
+  --il-radius-panel: 22px;
+  --il-radius-control: 14px;
+  --il-radius-pill: 999px;
+  /* A notification avatar is round, an icon is a rounded tile. */
+  --il-radius-avatar: 50%;
+  --il-radius-icon: 11px;
+
+  /* Layout ----------------------------------------------------------------- */
+  /*
+   * A hard width, not a hint: the layout renders at exactly this size, or at
+   * 100% of a narrower parent. The default is the popover because `popover` is
+   * the default composition; the feed overrides it through the layout attribute.
+   */
+  --il-width-panel: 400px;
+  --il-width-feed: 800px;
+  --il-width-current: var(--il-width-panel);
+  /* Padding of the root surface. It is also the inset its rows sit inside. */
+  --il-padding: 14px;
+  /* The vertical rhythm between the blocks of the composition. */
+  --il-block-gap: 10px;
+  /* The space between two notification rows of one day. */
+  --il-row-gap: 2px;
+  /* The size of the leading avatar or icon tile. */
+  --il-avatar-size: 36px;
+  /* A cap used by a row that leaves the unread selection (Iteration 17). */
+  --il-row-max-height: 6rem;
+  /* How many rows a short panel shows before its list scrolls. */
+  --il-list-max-height: 340px;
+
+  /* Type ------------------------------------------------------------------- */
+  --il-font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif;
+  --il-font-size: 14px;
+
+  /* Motion ----------------------------------------------------------------- */
+  --il-ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --il-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --il-duration-fast: 140ms;
+  --il-duration: 240ms;
+  --il-duration-slow: 420ms;
+
+  /* Palette: dark (default) ------------------------------------------------ */
+  color-scheme: dark;
+
+  /* Surfaces */
+  --il-surface: #141419;
+  --il-surface-raised: #1d1d25;
+  --il-panel: #1b1b22;
+  --il-control: #23232c;
+  --il-control-hover: #2c2c37;
+  /*
+   * Row states are their own tokens instead of the control fill: a row is a
+   * reading target, and the look of its hover has to keep 12 px captions above
+   * 4.5:1. `--il-control-hover` is still available for buttons and other
+   * controls whose text is larger or does not include a caption.
+   */
+  --il-row-hover: #202028;
+  --il-row-press: #262630;
+  --il-unread-surface: #261821;
+  --il-unread-surface-hover: #2f1b24;
+
+  /* Text */
+  --il-text: #f4f4f6;
+  --il-text-muted: #a2a2b0;
+  /*
+   * Captions, 11.5–12.5 px: WCAG AA wants 4.5:1 for text this size, and this one
+   * is measured against the darkest and lightest surfaces it lands on, the
+   * unread tint and the row hover included. Keep it at or above that when
+   * retuning.
+   */
+  --il-text-subtle: #9595a3;
+  --il-ink: #f4f4f6;
+  --il-ink-contrast: #16161a;
+
+  /* Lines */
+  --il-border: rgba(255, 255, 255, 0.07);
+  --il-border-strong: rgba(255, 255, 255, 0.14);
+  /*
+   * The focus ring is deliberately stronger than the reference one: at 60% the
+   * pink measured 2.41:1 against the dark surface, below the 3:1 a focus
+   * indicator needs. 90% keeps the hue, measures 4.15:1 on the surface and no
+   * less than 3.19:1 on any row surface.
+   */
+  --il-focus-ring: rgba(255, 33, 90, 0.9);
+
+  /* Accent */
+  --il-accent: #ff215a;
+  --il-accent-hover: #ff4271;
+  --il-accent-press: #e30f49;
+  --il-accent-contrast: #ffffff;
+  --il-accent-ink: #ff6b90;
+  --il-accent-soft: rgba(255, 33, 90, 0.16);
+  --il-accent-soft-strong: rgba(255, 33, 90, 0.28);
+  --il-accent-glow: rgba(255, 33, 90, 0.45);
+
+  /* Feedback */
+  --il-danger: #ff6178;
+  /*
+   * Text on `--il-danger`. The danger fill is light in the dark theme, so white
+   * text on it measures 2.9:1; the dark ink is 6.32:1. The light theme keeps
+   * white on its darker fill (4.67:1).
+   */
+  --il-danger-contrast: #141419;
+  --il-danger-ink: #ffc2cb;
+  --il-danger-soft: rgba(255, 97, 120, 0.14);
+
+  /*
+   * The unknown outcome is not a rejection: it says “the answer was lost, the
+   * application is reconciling”. Amber separates it from the red of a confirmed
+   * failure without turning the row into an error.
+   */
+  --il-warning: #ffb86b;
+  --il-warning-ink: #ffd6a3;
+  --il-warning-soft: rgba(255, 184, 107, 0.14);
+
+  /* Loading */
+  --il-skeleton-base: rgba(255, 255, 255, 0.05);
+  --il-skeleton-shine: rgba(255, 255, 255, 0.12);
+
+  /* Depth */
+  --il-shadow-card:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 32px 64px -32px rgba(0, 0, 0, 0.9),
+    0 8px 24px -16px rgba(0, 0, 0, 0.7);
+  --il-shadow-panel: 0 24px 48px -24px rgba(0, 0, 0, 0.85);
+}
+
+/* Palette: light ----------------------------------------------------------- */
+
+.il-root[data-il-theme='light'] {
+  color-scheme: light;
+
+  --il-surface: #f4f4f5;
+  --il-surface-raised: #ffffff;
+  --il-panel: #ffffff;
+  --il-control: #f4f4f6;
+  --il-control-hover: #ececef;
+  --il-row-hover: #efeff1;
+  --il-row-press: #e8e8eb;
+  --il-unread-surface: #fff1f4;
+  --il-unread-surface-hover: #ffe4ea;
+
+  --il-text: #171719;
+  /*
+   * Both greys are darker than they look like they should be: on a light card a
+   * mid grey that "reads" as secondary drops below 4.5:1. These are the lightest
+   * values that still pass for 11.5–12.5 px captions on every row state, the
+   * unread tint and the hover included.
+   */
+  --il-text-muted: #54545e;
+  --il-text-subtle: #66666f;
+  --il-ink: #171719;
+  --il-ink-contrast: #ffffff;
+
+  --il-border: rgba(23, 23, 25, 0.07);
+  --il-border-strong: rgba(23, 23, 25, 0.14);
+  /* 98% measures 3.37:1 on the light surface and stays at or above 3.04:1 on
+     every row surface; the reference 45% measured 1.92:1. */
+  --il-focus-ring: rgba(255, 33, 90, 0.98);
+
+  --il-accent: #ff215a;
+  --il-accent-hover: #f5114e;
+  --il-accent-press: #d80c43;
+  --il-accent-contrast: #ffffff;
+  --il-accent-ink: #c2144a;
+  --il-accent-soft: #fee5e6;
+  --il-accent-soft-strong: #fbd2d5;
+  --il-accent-glow: rgba(255, 33, 90, 0.35);
+
+  --il-danger: #e0243f;
+  --il-danger-contrast: #ffffff;
+  --il-danger-ink: #a3102a;
+  --il-danger-soft: #fde8ec;
+
+  --il-warning: #a35a00;
+  --il-warning-ink: #7a4300;
+  --il-warning-soft: #fff1dc;
+
+  --il-skeleton-base: rgba(23, 23, 25, 0.06);
+  --il-skeleton-shine: rgba(23, 23, 25, 0.12);
+
+  --il-shadow-card:
+    0 32px 64px -40px rgba(23, 23, 25, 0.35), 0 6px 20px -12px rgba(23, 23, 25, 0.12);
+  --il-shadow-panel: 0 24px 48px -24px rgba(23, 23, 25, 0.3);
+}

@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inboxline — static style stand</title>
+    <!--
+      The built stylesheet is the one a consumer installs. Run `pnpm build`
+      first, then `pnpm stand` and open /apps/style-stand/.
+    -->
+    <link rel="stylesheet" href="../../packages/core/dist/inboxline.css" />
+    <style>
+      /* Page chrome of the stand only. None of this is part of the library. */
+      :root {
+        color-scheme: dark;
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+          'Noto Sans', sans-serif;
+        font-size: 14px;
+        color: #f4f4f6;
+        background: #0b0b0e;
+      }
+
+      body {
+        margin: 0;
+        padding: 32px 20px 72px;
+      }
+
+      .stand {
+        max-width: 1480px;
+        margin: 0 auto;
+      }
+
+      .stand-title {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .stand-lead {
+        max-width: 760px;
+        margin: 8px 0 28px;
+        color: #a2a2b0;
+        line-height: 1.55;
+      }
+
+      .stand-section {
+        margin-top: 40px;
+      }
+
+      .stand-section-title {
+        margin: 0 0 4px;
+        font-size: 15px;
+        font-weight: 650;
+      }
+
+      .stand-section-note {
+        margin: 0 0 16px;
+        color: #9595a3;
+        font-size: 12.5px;
+      }
+
+      .stand-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 24px;
+      }
+
+      .stand-column {
+        min-width: 0;
+      }
+
+      .stand-label {
+        margin: 0 0 8px;
+        color: #9595a3;
+        font-size: 11.5px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      /* A page-level narrow container: the library must fit it, not stretch it. */
+      .stand-narrow {
+        width: 320px;
+        max-width: 100%;
+      }
+
+      .stand-light {
+        padding: 16px;
+        background: #e9e9ec;
+        border-radius: 34px;
+      }
+
+      .stand-note {
+        max-width: 400px;
+        margin: 10px 0 0;
+        color: #9595a3;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .stand-divider {
+        height: 1px;
+        margin: 20px 0;
+        background: #26262e;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stand">
+      <h1 class="stand-title">Inboxline — static style stand</h1>
+      <p class="stand-lead">
+        Manual visual review of the token layer and the feed slots. The page uses the built
+        stylesheet, so it shows exactly what a consumer installs. Trigger, panel, filters and
+        counter are not part of this iteration.
+      </p>
+
+      <section class="stand-section" aria-labelledby="feed-dark-title">
+        <h2 class="stand-section-title" id="feed-dark-title">Feed, dark</h2>
+        <p class="stand-section-note">800 px feed at the default width.</p>
+
+        <div class="il-root" data-il-layout="feed" data-il-theme="dark">
+          <header class="il-header">
+            <h2 class="il-heading">Notifications</h2>
+          </header>
+
+          <ul class="il-list" data-il-status="ready" aria-label="Notifications">
+            <li class="il-group">
+              <h3 class="il-group-label">Today</h3>
+              <ul class="il-group-list">
+                <li class="il-item" data-il-unread="true">
+                  <span class="il-item-avatar" aria-hidden="true">AK</span>
+                  <div class="il-item-content">
+                    <div class="il-item-meta">
+                      <span>Anna Kovacs</span>
+                      <time class="il-item-time" datetime="2026-10-19T09:48:00Z">12 min ago</time>
+                    </div>
+                    <p class="il-item-title">New booking confirmed</p>
+                    <p class="il-item-body">
+                      Studio A, Thursday at 14:00. The guest paid in full and the calendar has been
+                      updated.
+                    </p>
+                  </div>
+                  <span class="il-item-unread-marker" aria-hidden="true"></span>
+                </li>
+
+                <li class="il-item" data-il-unread="true" data-il-pending="true">
+                  <span class="il-item-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+                      <path d="M10 21a2 2 0 0 0 4 0" />
+                    </svg>
+                  </span>
+                  <div class="il-item-content">
+                    <div class="il-item-meta">
+                      <span>Inboxline</span>
+                      <time class="il-item-time" datetime="2026-10-19T09:36:00Z">24 min ago</time>
+                    </div>
+                    <p class="il-item-title">Marked as read</p>
+                    <p class="il-item-body">
+                      The answer is on its way. The marker is pulsing while the request is in
+                      flight; the text keeps its contrast.
+                    </p>
+                  </div>
+                  <span class="il-item-unread-marker" aria-hidden="true"></span>
+                </li>
+
+                <li class="il-item" data-il-unknown="true">
+                  <span class="il-item-avatar" aria-hidden="true">MB</span>
+                  <div class="il-item-content">
+                    <div class="il-item-meta">
+                      <span>Marco Bianchi</span>
+                      <span>Checking status…</span>
+                      <time class="il-item-time" datetime="2026-10-19T09:12:00Z">48 min ago</time>
+                    </div>
+                    <p class="il-item-title">Invoice needs your review</p>
+                    <p class="il-item-body">
+                      The reply was lost on the way back. The row stays amber until the application
+                      reconciles it with the server.
+                    </p>
+                  </div>
+                  <span class="il-item-unread-marker" aria-hidden="true"></span>
+                </li>
+
+                <li class="il-item">
+                  <span class="il-item-avatar" aria-hidden="true">LS</span>
+                  <div class="il-item-content">
+                    <div class="il-item-meta">
+                      <span>Lena Sørensen</span>
+                      <time class="il-item-time" datetime="2026-10-19T08:40:00Z">1 h ago</time>
+                    </div>
+                    <p class="il-item-title">
+                      <a class="il-item-title" href="#stand-link">Open the workspace settings</a>
+                    </p>
+                    <p class="il-item-body">
+                      A title can be the link into the application. Tab to it to see the focus ring.
+                    </p>
+                  </div>
+                  <span class="il-item-unread-marker" aria-hidden="true"></span>
+                </li>
+              </ul>
+            </li>
+
+            <li class="il-group">
+              <h3 class="il-group-label">Yesterday</h3>
+              <ul class="il-group-list">
+                <li class="il-item">
+                  <span class="il-item-avatar" aria-hidden="true">TS</span>
+                  <div class="il-item-content">
+                    <div class="il-item-meta">
+                      <span>Tomás Silva</span>
+                      <time class="il-item-time" datetime="2026-10-18T17:05:00Z">Yesterday</time>
+                    </div>
+                    <p class="il-item-title">Weekly summary is ready</p>
+                    <p class="il-item-body">
+                      Four bookings, two cancellations and one new client. A read row has no marker
+                      and no tinted surface.
+                    </p>
+                  </div>
+                  <span class="il-item-unread-marker" aria-hidden="true"></span>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+
+        <p class="stand-note">
+          Unread rows carry a tint, a dot and the unread word in the accessible name. Pending never
+          fades the text. Unknown uses the amber ring and a textual status.
+        </p>
+      </section>
+
+      <section class="stand-section" aria-labelledby="feed-light-title">
+        <h2 class="stand-section-title" id="feed-light-title">Feed, light</h2>
+        <p class="stand-section-note">The same composition with `data-il-theme="light"`.</p>
+
+        <div class="il-root" data-il-layout="feed" data-il-theme="light">
+          <header class="il-header">
+            <h2 class="il-heading">Notifications</h2>
+          </header>
+
+          <ul class="il-list" data-il-status="ready" aria-label="Notifications">
+            <li class="il-group">
+              <h3 class="il-group-label">Today</h3>
+              <ul class="il-group-list">
+                <li class="il-item" data-il-unread="true">
+                  <span class="il-item-avatar" aria-hidden="true">AK</span>
+                  <div class="il-item-content">
+                    <div class="il-item-meta">
+                      <span>Anna Kovacs</span>
+                      <time class="il-item-time" datetime="2026-10-19T09:48:00Z">12 min ago</time>
+                    </div>
+                    <p class="il-item-title">New booking confirmed</p>
+                    <p class="il-item-body">
+                      Studio A, Thursday at 14:00. The guest paid in full and the calendar has been
+                      updated.
+                    </p>
+                  </div>
+                  <span class="il-item-unread-marker" aria-hidden="true"></span>
+                </li>
+
+                <li class="il-item" data-il-unknown="true">
+                  <span class="il-item-avatar" aria-hidden="true">MB</span>
+                  <div class="il-item-content">
+                    <div class="il-item-meta">
+                      <span>Marco Bianchi</span>
+                      <span>Checking status…</span>
+                      <time class="il-item-time" datetime="2026-10-19T09:12:00Z">48 min ago</time>
+                    </div>
+                    <p class="il-item-title">Invoice needs your review</p>
+                    <p class="il-item-body">
+                      The reply was lost on the way back. The row stays amber until the application
+                      reconciles it with the server.
+                    </p>
+                  </div>
+                  <span class="il-item-unread-marker" aria-hidden="true"></span>
+                </li>
+
+                <li class="il-item">
+                  <span class="il-item-avatar" aria-hidden="true">TS</span>
+                  <div class="il-item-content">
+                    <div class="il-item-meta">
+                      <span>Tomás Silva</span>
+                      <time class="il-item-time" datetime="2026-10-18T17:05:00Z">Yesterday</time>
+                    </div>
+                    <p class="il-item-title">Weekly summary is ready</p>
+                    <p class="il-item-body">Four bookings, two cancellations and one new client.</p>
+                  </div>
+                  <span class="il-item-unread-marker" aria-hidden="true"></span>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="stand-section" aria-labelledby="narrow-title">
+        <h2 class="stand-section-title" id="narrow-title">Narrow containers: 320 px</h2>
+        <p class="stand-section-note">
+          The root is capped by its parent, the text wraps and nothing scrolls sideways.
+        </p>
+
+        <div class="stand-row">
+          <div class="stand-column stand-narrow">
+            <p class="stand-label">Feed, dark, 320</p>
+            <div class="il-root" data-il-layout="feed" data-il-theme="dark">
+              <header class="il-header">
+                <h2 class="il-heading">Notifications</h2>
+              </header>
+              <ul class="il-list" data-il-status="ready" aria-label="Notifications">
+                <li class="il-group">
+                  <h3 class="il-group-label">Today</h3>
+                  <ul class="il-group-list">
+                    <li class="il-item" data-il-unread="true">
+                      <span class="il-item-avatar" aria-hidden="true">AK</span>
+                      <div class="il-item-content">
+                        <div class="il-item-meta">
+                          <span>Anna Kovacs</span>
+                          <time class="il-item-time" datetime="2026-10-19T09:48:00Z">12 min ago</time>
+                        </div>
+                        <p class="il-item-title">
+                          A deliberately long notification title that has to wrap inside the card
+                        </p>
+                        <p class="il-item-body">
+                          A long body as well: the guest asked for an extra chair, a late checkout
+                          and a quiet room away from the street.
+                        </p>
+                      </div>
+                      <span class="il-item-unread-marker" aria-hidden="true"></span>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="stand-column stand-light">
+            <p class="stand-label">Popover, light, 320</p>
+            <div class="stand-narrow">
+              <div class="il-root" data-il-layout="popover" data-il-theme="light">
+                <header class="il-header">
+                  <h2 class="il-heading">Notifications</h2>
+                </header>
+                <ul class="il-list" data-il-status="ready" aria-label="Notifications">
+                  <li class="il-group">
+                    <h3 class="il-group-label">Today</h3>
+                    <ul class="il-group-list">
+                      <li class="il-item" data-il-unread="true">
+                        <span class="il-item-avatar" aria-hidden="true">AK</span>
+                        <div class="il-item-content">
+                          <div class="il-item-meta">
+                            <span>Anna Kovacs</span>
+                            <time class="il-item-time" datetime="2026-10-19T09:48:00Z">12 min ago</time>
+                          </div>
+                          <p class="il-item-title">New booking confirmed</p>
+                          <p class="il-item-body">Studio A, Thursday at 14:00.</p>
+                        </div>
+                        <span class="il-item-unread-marker" aria-hidden="true"></span>
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="stand-section" aria-labelledby="popover-title">
+        <h2 class="stand-section-title" id="popover-title">Popover at 400 px</h2>
+        <p class="stand-section-note">
+          The list scrolls inside the panel; the header stays put. Trigger and panel chrome arrive
+          in Iteration 15.
+        </p>
+
+        <div class="stand-row">
+          <div class="stand-column">
+            <p class="stand-label">Dark</p>
+            <div class="il-root" data-il-layout="popover" data-il-theme="dark">
+              <header class="il-header">
+                <h2 class="il-heading">Notifications</h2>
+              </header>
+
+              <ul class="il-list" data-il-status="ready" aria-label="Notifications">
+                <li class="il-group">
+                  <h3 class="il-group-label">Today</h3>
+                  <ul class="il-group-list">
+                    <li class="il-item" data-il-unread="true">
+                      <span class="il-item-avatar" aria-hidden="true">AK</span>
+                      <div class="il-item-content">
+                        <div class="il-item-meta">
+                          <span>Anna Kovacs</span>
+                          <time class="il-item-time" datetime="2026-10-19T09:48:00Z">12 min ago</time>
+                        </div>
+                        <p class="il-item-title">New booking confirmed</p>
+                        <p class="il-item-body">Studio A, Thursday at 14:00.</p>
+                      </div>
+                      <span class="il-item-unread-marker" aria-hidden="true"></span>
+                    </li>
+                    <li class="il-item">
+                      <span class="il-item-avatar" aria-hidden="true">LS</span>
+                      <div class="il-item-content">
+                        <div class="il-item-meta">
+                          <span>Lena Sørensen</span>
+                          <time class="il-item-time" datetime="2026-10-19T08:40:00Z">1 h ago</time>
+                        </div>
+                        <p class="il-item-title">Workspace settings updated</p>
+                      </div>
+                      <span class="il-item-unread-marker" aria-hidden="true"></span>
+                    </li>
+                    <li class="il-item" data-il-unread="true" data-il-pending="true">
+                      <span class="il-item-avatar" aria-hidden="true">MB</span>
+                      <div class="il-item-content">
+                        <div class="il-item-meta">
+                          <span>Marco Bianchi</span>
+                          <time class="il-item-time" datetime="2026-10-19T08:12:00Z">2 h ago</time>
+                        </div>
+                        <p class="il-item-title">Invoice needs your review</p>
+                      </div>
+                      <span class="il-item-unread-marker" aria-hidden="true"></span>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+
+              <button type="button" class="il-load-more">Show more</button>
+            </div>
+          </div>
+
+          <div class="stand-column stand-light">
+            <p class="stand-label">Light</p>
+            <div class="il-root" data-il-layout="popover" data-il-theme="light">
+              <header class="il-header">
+                <h2 class="il-heading">Notifications</h2>
+              </header>
+
+              <ul class="il-list" data-il-status="ready" aria-label="Notifications">
+                <li class="il-group">
+                  <h3 class="il-group-label">Today</h3>
+                  <ul class="il-group-list">
+                    <li class="il-item" data-il-unread="true">
+                      <span class="il-item-avatar" aria-hidden="true">AK</span>
+                      <div class="il-item-content">
+                        <div class="il-item-meta">
+                          <span>Anna Kovacs</span>
+                          <time class="il-item-time" datetime="2026-10-19T09:48:00Z">12 min ago</time>
+                        </div>
+                        <p class="il-item-title">New booking confirmed</p>
+                        <p class="il-item-body">Studio A, Thursday at 14:00.</p>
+                      </div>
+                      <span class="il-item-unread-marker" aria-hidden="true"></span>
+                    </li>
+                    <li class="il-item">
+                      <span class="il-item-avatar" aria-hidden="true">LS</span>
+                      <div class="il-item-content">
+                        <div class="il-item-meta">
+                          <span>Lena Sørensen</span>
+                          <time class="il-item-time" datetime="2026-10-19T08:40:00Z">1 h ago</time>
+                        </div>
+                        <p class="il-item-title">Workspace settings updated</p>
+                      </div>
+                      <span class="il-item-unread-marker" aria-hidden="true"></span>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+
+              <button type="button" class="il-load-more">Show more</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="stand-section" aria-labelledby="states-title">
+        <h2 class="stand-section-title" id="states-title">List and row states</h2>
+        <p class="stand-section-note">
+          Focus: press Tab to reach the “Show more” control and the retry button. The ring is the
+          same in both themes.
+        </p>
+
+        <div class="stand-row">
+          <div class="stand-column">
+            <p class="stand-label">Rows</p>
+            <div class="il-root" data-il-layout="popover" data-il-theme="dark">
+              <header class="il-header">
+                <h2 class="il-heading">Row states</h2>
+              </header>
+              <ul class="il-list" data-il-status="ready" aria-label="Row states">
+                <li class="il-group">
+                  <h3 class="il-group-label">Today</h3>
+                  <ul class="il-group-list">
+                    <li class="il-item">
+                      <span class="il-item-avatar" aria-hidden="true">RD</span>
+                      <div class="il-item-content">
+                        <div class="il-item-meta">
+                          <span>Read</span>
+                          <time class="il-item-time" datetime="2026-10-19T09:00:00Z">1 h ago</time>
+                        </div>
+                        <p class="il-item-title">Confirmed state</p>
+                      </div>
+                      <span class="il-item-unread-marker" aria-hidden="true"></span>
+                    </li>
+                    <li class="il-item" data-il-unread="true">
+                      <span class="il-item-avatar" aria-hidden="true">UR</span>
+                      <div class="il-item-content">
+                        <div class="il-item-meta">
+                          <span>Unread</span>
+                          <time class="il-item-time" datetime="2026-10-19T09:00:00Z">1 h ago</time>
+                        </div>
+                        <p class="il-item-title">Unread surface and marker</p>
+                      </div>
+                      <span class="il-item-unread-marker" aria-hidden="true"></span>
+                    </li>
+                    <li class="il-item" data-il-unread="true" data-il-pending="true">
+                      <span class="il-item-avatar" aria-hidden="true">PE</span>
+                      <div class="il-item-content">
+                        <div class="il-item-meta">
+                          <span>Pending</span>
+                          <time class="il-item-time" datetime="2026-10-19T09:00:00Z">1 h ago</time>
+                        </div>
+                        <p class="il-item-title">The request is in flight</p>
+                      </div>
+                      <span class="il-item-unread-marker" aria-hidden="true"></span>
+                    </li>
+                    <li class="il-item" data-il-unknown="true">
+                      <span class="il-item-avatar" aria-hidden="true">UN</span>
+                      <div class="il-item-content">
+                        <div class="il-item-meta">
+                          <span>Unknown</span>
+                          <span>Checking status…</span>
+                          <time class="il-item-time" datetime="2026-10-19T09:00:00Z">1 h ago</time>
+                        </div>
+                        <p class="il-item-title">The answer was lost</p>
+                      </div>
+                      <span class="il-item-unread-marker" aria-hidden="true"></span>
+                    </li>
+                    <li class="il-item" aria-disabled="true">
+                      <span class="il-item-avatar" aria-hidden="true">DI</span>
+                      <div class="il-item-content">
+                        <div class="il-item-meta">
+                          <span>Disabled row</span>
+                          <time class="il-item-time" datetime="2026-10-19T09:00:00Z">1 h ago</time>
+                        </div>
+                        <p class="il-item-title">No pointer input</p>
+                      </div>
+                      <span class="il-item-unread-marker" aria-hidden="true"></span>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="stand-column">
+            <p class="stand-label">Loading, empty, errors</p>
+            <div class="il-root" data-il-layout="popover" data-il-theme="light">
+              <header class="il-header">
+                <h2 class="il-heading">List states</h2>
+              </header>
+
+              <div class="il-loading" role="status">
+                <span class="il-visually-hidden">Loading notifications…</span>
+                <span class="il-loading-row" aria-hidden="true"></span>
+                <span class="il-loading-row" aria-hidden="true"></span>
+                <span class="il-loading-row" aria-hidden="true"></span>
+              </div>
+
+              <div class="il-divider"></div>
+
+              <div class="il-empty">
+                <p class="il-item-title">You are all caught up</p>
+                <p class="il-item-body">New notifications will appear here.</p>
+              </div>
+
+              <div class="il-divider"></div>
+
+              <div class="il-error" role="alert">
+                <span>Notifications could not be loaded.</span>
+                <button type="button">Try again</button>
+              </div>
+
+              <div class="il-page-error" role="alert">
+                <span>The next page could not be loaded.</span>
+                <button type="button">Try again</button>
+              </div>
+
+              <div class="il-divider"></div>
+
+              <button type="button" class="il-load-more">Show more</button>
+            </div>
+          </div>
+
+          <div class="stand-column">
+            <p class="stand-label">Disabled widget</p>
+            <div class="il-root" data-il-layout="popover" data-il-theme="dark" data-il-disabled="true">
+              <header class="il-header">
+                <h2 class="il-heading">Notifications</h2>
+              </header>
+              <ul class="il-list" data-il-status="ready" aria-label="Notifications">
+                <li class="il-group">
+                  <h3 class="il-group-label">Today</h3>
+                  <ul class="il-group-list">
+                    <li class="il-item" data-il-unread="true">
+                      <span class="il-item-avatar" aria-hidden="true">AK</span>
+                      <div class="il-item-content">
+                        <div class="il-item-meta">
+                          <span>Anna Kovacs</span>
+                          <time class="il-item-time" datetime="2026-10-19T09:48:00Z">12 min ago</time>
+                        </div>
+                        <p class="il-item-title">New booking confirmed</p>
+                      </div>
+                      <span class="il-item-unread-marker" aria-hidden="true"></span>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

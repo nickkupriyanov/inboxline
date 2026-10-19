@@ -1,9 +1,9 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  // Two entry points on purpose: `index` stays free of DOM code, and a bundler
-  // only pulls `dom` in when a binding imports it. The stylesheet follows in
-  // Iteration 11.
+  // Two JavaScript entry points on purpose: `index` stays free of DOM code, and a
+  // bundler only pulls `dom` in when a binding imports it. The stylesheet is
+  // concatenated into `dist/inboxline.css` by the post-build step.
   entry: {
     index: 'src/index.ts',
     dom: 'src/dom/index.ts',

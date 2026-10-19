@@ -5,7 +5,7 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 10 — DOM utilities.** The
+> **Current status: Iteration 11 — shared styles and the reference map.** The
 > notification, context, filter, page, adapter and error types are implemented in
 > `@nickkupriyanov/inboxline-core` (`packages/core/src/`), next to the RFC 3339
 > timestamp and calendar-day helpers, the boundary checks an adapter wraps its
@@ -14,9 +14,11 @@ work; this file owns the descriptions.
 > the pure `deriveInboxView()` with its snapshot memo, `createMockAdapter()` with
 > its simulator controls, `createInboxController()` with its lifecycle,
 > first-page, counter, filter, paging, mutation and external-update behaviour,
-> and the separate browser entry point `@nickkupriyanov/inboxline-core/dom` with
-> its focus, size and available-area helpers. The React binding is marked
-> **Planned** and is not part of the available API.
+> the separate browser entry point `@nickkupriyanov/inboxline-core/dom` with its
+> focus, size and available-area helpers, and the authored stylesheet published
+> as `@nickkupriyanov/inboxline-core/styles.css` with a copy on the React entry.
+> The React binding itself is marked **Planned** and is not part of the available
+> API.
 
 ## 1. Packages and entry points
 
@@ -24,17 +26,18 @@ work; this file owns the descriptions.
 | -------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 9) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model, the deterministic mock adapter and the controller lifecycle, filters, paging, mutations and external invalidations. |
 | `@nickkupriyanov/inboxline-core/dom`         | Browser helpers (Iteration 10)                           | Focus around a non-modal panel, element size observation and the viewport-constrained area around an anchor; no React, no import-time browser access.                                                                                                                                |
-| `@nickkupriyanov/inboxline-core/styles.css`  | Not built yet                                            | Authored stylesheet — Iteration 11.                                                                                                                                                                                                                                                  |
+| `@nickkupriyanov/inboxline-core/styles.css`  | Stylesheet (Iteration 11)                                | Plain CSS: `--il-*` design tokens for both themes, a scoped base layer, the feed root, rows and list states. Built into `dist/inboxline.css`.                                                                                                                                        |
 | `@nickkupriyanov/inboxline-react`            | Empty placeholder                                        | Provider, hooks and layouts — Iteration 12 onwards.                                                                                                                                                                                                                                  |
-| `@nickkupriyanov/inboxline-react/styles.css` | Not built yet                                            | Copy of the core stylesheet — Iteration 11.                                                                                                                                                                                                                                          |
+| `@nickkupriyanov/inboxline-react/styles.css` | Copy of the core stylesheet (Iteration 11)               | Byte copy of `dist/inboxline.css`, made by the React post-build step.                                                                                                                                                                                                                |
 | `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                                                                          |
 
 The core publishes values from `./adapter`, `./classNames`, `./config`,
 `./context`, `./controller`, `./derive`, `./errors`, `./i18n`, `./mock`,
 `./reducer` and `./time`; `./types` is a type-only module. The separate `./dom`
-entry publishes the browser helpers. The `styles/` directory does not exist until
-Iteration 11, and each entry point has a test that fails when an undeclared
-runtime export appears.
+entry publishes the browser helpers. `./styles.css` publishes the built
+stylesheet; the authored files live in `packages/core/src/styles/` and are
+concatenated by the post-build step. Each entry point has a test that fails when
+an undeclared runtime export appears.
 
 Rules that hold for every entry point:
 
@@ -93,6 +96,71 @@ Rules the DOM entry point guarantees:
    rectangle, the viewport and the margin, and skips a listener call when the
    result would be equal. A scroll that does not move the anchor therefore does
    not cause a render.
+
+### Stylesheet
+
+**Implemented in Iteration 11** (`packages/core/src/styles/`,
+`packages/core/scripts/postbuild.mjs`, `packages/react/scripts/postbuild.mjs`).
+The stylesheet is plain CSS and a public contract: classes and tokens keep the
+project prefixes, and a change to either is a change to the published API.
+
+The authored files are concatenated in this order:
+
+| Source                 | Content                                                                |
+| ---------------------- | ---------------------------------------------------------------------- |
+| `styles/tokens.css`    | Shape, layout, type, motion, the dark palette and the light overrides. |
+| `styles/base.css`      | Scoped box model, typography, focus, utilities and reduced motion.     |
+| `styles/inboxline.css` | Root, header, list, day groups, rows and loading/empty/error states.   |
+
+The post-build step writes `dist/inboxline.css`. The core publishes it as
+`./styles.css`; the React post-build step copies the same bytes to
+`packages/react/dist/inboxline.css`, so `inboxline-react/styles.css` works when
+only the binding is installed. Both packages declare CSS in `sideEffects`, so a
+bundler keeps the file. Building the React package requires the core build to
+run first; the root `pnpm build` guarantees the order.
+
+Rules the stylesheet guarantees:
+
+1. **Dark by default, light by an explicit attribute.** The palette is defined on
+   `.il-root`; `[data-il-theme='light']` redefines the same set. There is no
+   `prefers-color-scheme` rule, so an explicitly chosen theme is never switched
+   by the system preference.
+2. **Nothing reaches the consuming page.** Every authored rule is scoped by an
+   `il-*` class or by `.il-root`. There is no reset of `html`, `body`, `:root` or
+   bare elements, and controls inherit the font through a zero-specificity
+   `:where()` reset.
+3. **The family geometry is a token.** Card 28 px, inner panel 22 px, control
+   14 px, pill 999 px; the popover is 400 px, the feed 800 px, and both are
+   capped by `max-width: 100%` and work in a 320 px container.
+4. **The layout attribute chooses the width and the scrolling.** `popover` uses
+   `--il-width-panel`, a 340 px list cap and the panel shadow; `feed` uses
+   `--il-width-feed` and grows with its rows. The viewport never chooses the
+   composition, so an open panel does not re-lay out by itself.
+5. **States are attributes, not modifier classes.** `data-il-unread`,
+   `data-il-pending`, `data-il-unknown`, `data-il-disabled` and a row’s
+   `aria-disabled` are the visual hooks. Unread also carries the marker and the
+   accessible name; unknown pairs the amber ring with a textual status. A pending
+   row keeps its text contrast instead of fading.
+6. **Focus is visible and motion is optional.** One `:focus-visible` rule draws a
+   2 px ring with a 2 px offset. `prefers-reduced-motion: reduce` collapses every
+   animation and transition in the scoped subtree to 1 ms.
+
+The token values, their reference sources, the class map, the measured contrast
+deviations and the review stand are documented in
+[`visual-reference.md`](./visual-reference.md). The contrast of caption, warning,
+danger, focus and unread-marker colours is recalculated from the authored tokens
+by `packages/core/src/styles/styles.test.ts`; jsdom and screenshots are not
+treated as proof of contrast.
+
+`apps/style-stand/index.html` is a hand-written static page that links the built
+stylesheet and shows both themes, the feed and popover widths, the 320 px
+container, the row states and the list states. It is a review tool, not a
+published package. Browser regression automation remains Iteration 22.
+
+Trigger, panel, filters, counter and replaceable parts are deliberately absent
+from the slots and the stylesheet until their components exist in Iterations
+13–16. Internal helper classes (`.il-group-list`, `.il-loading-row`) are not
+slots and are not a public extension point.
 
 ## 2. Controller and snapshot
 
@@ -870,7 +938,9 @@ const { unreadCount } = assertInboxUnreadCount(await counterResponse.json());
 
 ## 5. Visual language
 
-**Planned (Iteration 11).** The look follows Slotline and Soundline:
+**Implemented in Iteration 11** (`packages/core/src/styles/`, see also
+[`visual-reference.md`](./visual-reference.md)). The look follows Slotline and
+Soundline:
 
 - Dark theme by default, an explicit light theme, and no automatic switch of an
   explicitly chosen theme by the system preference.
@@ -886,6 +956,14 @@ const { unreadCount } = assertInboxUnreadCount(await counterResponse.json());
   global resets applied to the consuming application.
 - Changing the base palette, geometry or typography beyond token configuration
   requires the user's agreement.
+
+The authored values are adapted from the reference tokens, with three measured
+exceptions recorded in `visual-reference.md`: the dark subtle caption is
+`#9595a3` instead of `#9292a0` (4.49:1 became 4.67:1 on `--il-control-hover`),
+and the focus ring is stronger (90% dark / 98% light) so it reaches 4.15:1 and
+3.37:1 instead of 2.41:1 and 1.92:1, and stays at or above 3.19:1 on every row
+surface. The palette itself, the 28/22/14/999 radii,
+the 400/800 widths and the motion values are unchanged.
 
 ## 6. Accessibility
 
@@ -922,6 +1000,10 @@ Accessibility ships with each UI iteration and is audited again in Iteration 18.
   generic stops flowing, and Vitest runs the same files as ordinary tests.
   In Iteration 1 `vitest typecheck` is not configured, so negative assertions
   are written as conditional types rather than as `@ts-expect-error`.
+- The stylesheet has no PostCSS or preprocessor step: a Node post-build script
+  concatenates the three authored files in a fixed order, and the React package
+  copies the result. `sideEffects` lists `**/*.css`, so tree-shaking keeps the
+  published file.
 - Package `README.md` files, the playground, Storybook, `tools/` and CI belong
   to later iterations and are not part of the scaffold.
 
@@ -1007,3 +1089,17 @@ belong to the binding. Importing the subpath touches no host object; a missing
 no-op remover instead of an exception. There is no focus trap because the panel
 is non-modal; `captureFocus`/`restoreFocus` only remember and return focus, and
 the binding decides whether returning it would steal focus from a click outside.
+
+Resolved in Iteration 11: the stylesheet is a public contract, not a theme
+preset. Tokens live on `.il-root`; the light theme is the same palette under an
+explicit attribute, and no system-preference query is present. Every rule is
+scoped, so the consuming page keeps its reset, typography and focus behaviour.
+The layout attribute, not the viewport, picks the 400 px popover or the 800 px
+feed, and both are capped by the parent. `data-il-*` carries row state; pending
+keeps text contrast, unknown is amber plus a textual status, and disabled is
+marked programmatically. The authored CSS is concatenated by a post-build step
+into `dist/inboxline.css`; the React package copies the same bytes. Trigger,
+panel, filters, counter and replaceable parts stay absent until they have a
+component. Contrast is recalculated from the tokens in `styles.test.ts`, with
+the measured focus-ring and dark-caption adjustments documented in
+`visual-reference.md`; a browser measurement remains part of the visual review.

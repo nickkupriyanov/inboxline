@@ -23,7 +23,9 @@
     "url": "https://github.com/nickkupriyanov/inboxline/issues"
   },
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -38,6 +40,7 @@
       "import": "./dist/dom.js",
       "require": "./dist/dom.cjs"
     },
+    "./styles.css": "./dist/inboxline.css",
     "./package.json": "./package.json"
   },
   "files": [
@@ -48,7 +51,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node scripts/postbuild.mjs",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",

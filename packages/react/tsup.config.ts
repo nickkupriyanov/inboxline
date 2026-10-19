@@ -1,8 +1,8 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  // One entry point for now. The optional `/motion` entry (Iteration 17) and the
-  // copied stylesheet (Iteration 11) are added once they exist.
+  // One JavaScript entry point for now. The stylesheet is copied into `dist` by
+  // the post-build step; the optional `/motion` entry arrives in Iteration 17.
   entry: {
     index: 'src/index.ts',
   },
