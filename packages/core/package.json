@@ -1,6 +1,6 @@
 {
   "name": "@nickkupriyanov/inboxline-core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Framework-free core of Inboxline: notification and adapter contracts, the reducer, the derived view model, the controller, errors and copy.",
   "keywords": [
     "notifications",
