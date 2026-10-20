@@ -810,6 +810,93 @@ describe('the bulk “mark all read” operation', () => {
   });
 });
 
+describe('confirmed refusals', () => {
+  function pendingRead(id = 'a', token = 1): InboxState {
+    return inboxReducer(loadedState(), {
+      type: 'readPending',
+      token,
+      id,
+      read: true,
+      previousRead: false,
+    });
+  }
+
+  it('explains a refused read next to its row and drops the layer', () => {
+    const error = failure('No permission');
+    const next = inboxReducer(pendingRead(), { type: 'readFailed', token: 1, id: 'a', error });
+
+    expect(next.actionError).toEqual({ scope: 'read', id: 'a', error });
+    expect(next.pending.reads.a).toBeUndefined();
+    expect(next.byId.a.read).toBe(false);
+  });
+
+  it('does not invent a refusal when an operation is abandoned', () => {
+    const next = inboxReducer(pendingRead(), { type: 'readFailed', token: 1, id: 'a' });
+    expect(next.actionError).toBeNull();
+  });
+
+  it('clears the previous refusal when a new read starts or succeeds', () => {
+    const refused = inboxReducer(pendingRead(), {
+      type: 'readFailed',
+      token: 1,
+      id: 'a',
+      error: failure(),
+    });
+    const retried = inboxReducer(refused, {
+      type: 'readPending',
+      token: 2,
+      id: 'a',
+      read: true,
+      previousRead: false,
+    });
+    expect(retried.actionError).toBeNull();
+
+    const confirmed = inboxReducer(retried, {
+      type: 'readConfirmed',
+      token: 2,
+      notification: note('a', { read: true }),
+      unreadCount: 2,
+    });
+    expect(confirmed.actionError).toBeNull();
+  });
+
+  it('drops the refusal with the list it belonged to when the filter changes', () => {
+    const refused = inboxReducer(pendingRead(), {
+      type: 'readFailed',
+      token: 1,
+      id: 'a',
+      error: failure(),
+    });
+    const filtered = inboxReducer(refused, { type: 'setFilter', filter: 'unread' });
+    expect(filtered.actionError).toBeNull();
+  });
+
+  it('explains a refused bulk operation and clears it on the next attempt', () => {
+    const base = counted(loadedState(), 3);
+    const pending = inboxReducer(base, { type: 'bulkPending', token: 7 });
+    const error = failure('No permission');
+    const refused = inboxReducer(pending, { type: 'bulkFailed', token: 7, error });
+
+    expect(refused.actionError).toEqual({ scope: 'bulk', error });
+    expect(refused.pending.bulk).toBeNull();
+    expect(refused.unreadCount).toBe(3);
+
+    const retried = inboxReducer(refused, { type: 'bulkPending', token: 8 });
+    expect(retried.actionError).toBeNull();
+  });
+
+  it('resets the refusal with the context', () => {
+    const refused = inboxReducer(pendingRead(), {
+      type: 'readFailed',
+      token: 1,
+      id: 'a',
+      error: failure(),
+    });
+    const changed = inboxReducer(refused, { type: 'contextChanged', contextKey: 'user-2' });
+    expect(changed.actionError).toBeNull();
+  });
+});
+
 describe('the reducer itself', () => {
   it('never mutates the page or the notifications it is given', () => {
     const items = [note('a'), note('b')];

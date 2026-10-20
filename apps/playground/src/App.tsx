@@ -1,10 +1,11 @@
 /**
  * The ready-made feed playground.
  *
- * Iteration 13 renders the real `<Inbox>` composition: the library owns the
- * header, filters, day groups, rows, paging and states, while the counter card
- * beside it stays headless to show that both read one controller. Separate
- * providers still stay isolated.
+ * Iteration 14 shows the complete row flow: activation with
+ * `onNotificationClick`, read/unread actions, “Mark all as read” and the
+ * pending, refused and reconciling states. The counter card beside it stays
+ * headless to show that both read one controller. Separate providers still stay
+ * isolated.
  */
 import { useState } from 'react';
 import {
@@ -97,7 +98,7 @@ function CounterCard({ title }: { title: string }) {
       <p className="pg-meta">
         A custom headless view over the same controller as the feed. filter:{' '}
         <code>{ui.filter}</code> · panel: <code>{ui.open ? 'open' : 'closed'}</code> · theme:{' '}
-        <code>{ui.theme}</code>
+        <code>{ui.theme}</code> · markReadOnOpen: <code>{String(ui.markReadOnOpen)}</code>
       </p>
       <div className="pg-row">
         <button type="button" onClick={() => ui.setOpen(!ui.open)}>
@@ -121,17 +122,18 @@ export function App() {
   const [controlledFilter, setControlledFilter] = useState<'all' | 'unread'>('all');
   const [controlledOpen, setControlledOpen] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [opened, setOpened] = useState<string | null>(null);
 
   return (
     <main className={`pg-page pg-page-${theme}`}>
       <header className="pg-header">
         <div>
-          <p className="pg-eyebrow">Iteration 13 · ready-made feed</p>
+          <p className="pg-eyebrow">Iteration 14 · actions and activation</p>
           <h1>Inboxline feed</h1>
           <p className="pg-lead">
-            The library now renders the real feed: day groups, filters, paging and every loading,
-            empty and error state. The counter card beside it is a headless view of the same
-            controller.
+            The feed now completes the visitor loop: activate a notification to navigate, mark one
+            row read or unread, or mark the whole context read. Pending, refused and reconciling
+            states stay next to the action instead of taking the list hostage.
           </p>
         </div>
         <button
@@ -147,12 +149,20 @@ export function App() {
         <p className="pg-meta">
           The counter and the feed share one snapshot and one unread counter. Filter and panel
           values are uncontrolled here (internal to the provider); the feed owns the visible filter
-          buttons.
+          buttons. Activating a row marks it read and reports its title below.
         </p>
-        <InboxProvider adapter={adapter} context={WORKSPACE_A} theme={theme}>
+        <InboxProvider
+          adapter={adapter}
+          context={WORKSPACE_A}
+          theme={theme}
+          onNotificationClick={(clicked) => setOpened(clicked.title)}
+        >
           <CounterCard title="Bell counter" />
           <Inbox />
         </InboxProvider>
+        <p className="pg-meta" aria-live="polite">
+          Last activated: <code>{opened ?? 'nothing yet'}</code>
+        </p>
         <div className="pg-row">
           <button type="button" onClick={() => simulateExternalEvent(WORKSPACE_A)}>
             Another client adds an event to workspace A

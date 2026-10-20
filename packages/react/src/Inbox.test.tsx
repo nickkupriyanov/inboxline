@@ -7,9 +7,10 @@
  * the component's implementation.
  */
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { InboxNotification } from '@nickkupriyanov/inboxline-core';
 import { Inbox, InboxProvider } from './index';
+import type { InboxProviderProps } from './index';
 import {
   CONTEXT_A,
   createFixtureAdapter,
@@ -25,6 +26,10 @@ import {
 function renderFeed(
   options: Parameters<typeof createFixtureAdapter>[0] = {},
   theme: 'dark' | 'light' = 'dark',
+  providerProps: Omit<
+    InboxProviderProps,
+    'adapter' | 'context' | 'clock' | 'theme' | 'config' | 'children'
+  > = {},
 ) {
   const adapter = createFixtureAdapter(options);
   const view = render(
@@ -34,6 +39,7 @@ function renderFeed(
       clock={testClock}
       theme={theme}
       config={{ locale: 'en', timeZone: 'UTC' }}
+      {...providerProps}
     >
       <Inbox />
     </InboxProvider>,
@@ -49,6 +55,12 @@ function adapterWith(
     pageSize,
     contexts: [{ context: CONTEXT_A, notifications }],
   };
+}
+
+function rowFor(title: string): HTMLElement {
+  const row = screen.getByText(title).closest('li');
+  if (row === null) throw new Error(`No row for ${title}`);
+  return row as HTMLElement;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -265,6 +277,181 @@ describe('Inbox filters and paging', () => {
     const { container } = renderFeed({ pageSize: 4 }, 'light');
     await screen.findByRole('list', { name: 'Notifications' });
     expect(container.querySelector('.il-root')?.getAttribute('data-il-theme')).toBe('light');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  Read actions, bulk action and focus                                        */
+/* -------------------------------------------------------------------------- */
+
+describe('Inbox read actions', () => {
+  it('marks a row read from its own sibling button without activating the notification', async () => {
+    const onNotificationClick = vi.fn();
+    renderFeed({ pageSize: 4 }, 'dark', { onNotificationClick });
+
+    await screen.findByText('Fourth');
+    const row = rowFor('Fourth');
+    const activate = within(row).getByRole('button', { name: /^Fourth/ });
+    const action = within(row).getByRole('button', { name: 'Mark as read: Fourth' });
+
+    expect(activate.contains(action)).toBe(false);
+    fireEvent.click(action);
+
+    expect(onNotificationClick).not.toHaveBeenCalled();
+    await waitFor(() => expect(rowFor('Fourth').getAttribute('data-il-unread')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Mark as unread: Fourth' })).toBeTruthy();
+  });
+
+  it('activates a row immediately while the read request is still running', async () => {
+    const onNotificationClick = vi.fn();
+    renderFeed({ pageSize: 4, latencyMs: 80 }, 'dark', { onNotificationClick });
+
+    await screen.findByText('Fourth');
+    fireEvent.click(screen.getByRole('button', { name: /^Fourth/ }));
+
+    expect(onNotificationClick).toHaveBeenCalledTimes(1);
+    expect(onNotificationClick).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'n4', read: false }),
+    );
+    expect(screen.getByText('Saving…')).toBeTruthy();
+
+    await waitFor(() => expect(rowFor('Fourth').getAttribute('data-il-unread')).toBeNull());
+  });
+
+  it('contains an exception from the activation callback and keeps the read request', async () => {
+    const onNotificationClick = vi.fn(() => {
+      throw new Error('navigation failed');
+    });
+    renderFeed({ pageSize: 4 }, 'dark', { onNotificationClick });
+
+    await screen.findByText('Fourth');
+    fireEvent.click(screen.getByRole('button', { name: /^Fourth/ }));
+
+    await waitFor(() => expect(rowFor('Fourth').getAttribute('data-il-unread')).toBeNull());
+    expect(onNotificationClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('The notification could not be updated')).toBeNull();
+  });
+
+  it('does not change the read state on activation when markReadOnOpen is false', async () => {
+    const onNotificationClick = vi.fn();
+    const { adapter } = renderFeed({ pageSize: 4 }, 'dark', {
+      onNotificationClick,
+      markReadOnOpen: false,
+    });
+    const setReadStatus = vi.spyOn(adapter, 'setReadStatus');
+
+    await screen.findByText('Fourth');
+    fireEvent.click(screen.getByRole('button', { name: /^Fourth/ }));
+
+    expect(onNotificationClick).toHaveBeenCalledTimes(1);
+    expect(setReadStatus).not.toHaveBeenCalled();
+    expect(rowFor('Fourth').getAttribute('data-il-unread')).toBe('true');
+  });
+
+  it('shows a refusal on one row and leaves the other rows usable', async () => {
+    const { adapter } = renderFeed({ pageSize: 4, latencyMs: 40 });
+    await screen.findByText('Fourth');
+
+    adapter.failNext('setReadStatus');
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as read: Fourth' }));
+
+    expect(screen.getByText('Saving…')).toBeTruthy();
+    expect(await screen.findByText('The notification could not be updated')).toBeTruthy();
+
+    expect(rowFor('Fourth').getAttribute('data-il-unread')).toBe('true');
+    const otherAction = screen.getByRole('button', { name: 'Mark as read: Third' });
+    expect(otherAction.getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('shows the reconciliation state when the answer to a read is lost', async () => {
+    const { adapter } = renderFeed({ pageSize: 4, latencyMs: 120 });
+    await screen.findByText('Fourth');
+
+    adapter.failNext('setReadStatus', { apply: true, outcome: 'unknown' });
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as read: Fourth' }));
+
+    expect(await screen.findByText('Checking with the server…')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('Checking with the server…')).toBeNull(), {
+      timeout: 2_000,
+    });
+    expect(rowFor('Fourth').getAttribute('data-il-unread')).toBeNull();
+  });
+
+  it('marks every notification read, including rows that are not loaded', async () => {
+    renderFeed({ pageSize: 2, latencyMs: 40 });
+    await screen.findByText('Third');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark all as read' }));
+
+    expect(screen.getByText('Marking all as read…')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Mark as unread: Fourth' }).getAttribute('aria-disabled'),
+    ).toBe('true');
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Mark all as read' })).toBeNull(),
+    );
+
+    expect(rowFor('Fourth').getAttribute('data-il-unread')).toBeNull();
+    expect(rowFor('Third').getAttribute('data-il-unread')).toBeNull();
+    expect(screen.getByText('0 unread notifications')).toBeTruthy();
+  });
+
+  it('keeps the rows and explains a refused bulk action', async () => {
+    const { adapter } = renderFeed({ pageSize: 2 });
+    await screen.findByText('Third');
+
+    adapter.failNext('markAllRead');
+    fireEvent.click(screen.getByRole('button', { name: 'Mark all as read' }));
+
+    expect(await screen.findByText('The notifications could not be marked read')).toBeTruthy();
+    expect(rowFor('Fourth').getAttribute('data-il-unread')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Mark all as read' })).toBeTruthy();
+  });
+
+  it('moves focus to the next activation control after opening an unread row', async () => {
+    const onNotificationClick = vi.fn();
+    renderFeed({ pageSize: 4 }, 'dark', { onNotificationClick });
+    await screen.findByText('Fourth');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unread' }));
+    await waitFor(() => expect(screen.queryByText('Second')).toBeNull());
+
+    const fourth = screen.getByRole('button', { name: /^Fourth/ });
+    fourth.focus();
+    fireEvent.click(fourth);
+
+    expect(onNotificationClick).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Third/ })),
+    );
+  });
+
+  it('moves focus along the unread selection and then to the filter', async () => {
+    renderFeed({ pageSize: 4 });
+    await screen.findByText('Fourth');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unread' }));
+    await waitFor(() => expect(screen.queryByText('Second')).toBeNull());
+
+    screen.getByRole('button', { name: 'Mark as read: Fourth' }).focus();
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as read: Fourth' }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: 'Mark as read: Third' }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as read: Third' }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: 'Mark as read: First' }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as read: First' }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Unread' })),
+    );
   });
 });
 

@@ -281,6 +281,22 @@ export interface InboxMessages {
   showUpdatesLabel: string;
   /** Marks every notification of the context read on the server. */
   markAllReadLabel: string;
+  /** Action that sets one loaded notification read. */
+  markReadLabel: string;
+  /** Action that sets one loaded notification unread. */
+  markUnreadLabel: string;
+  /** The individual read request is queued or in flight. */
+  readPendingLabel: string;
+  /** The individual read request lost its answer; the server is being reconciled. */
+  readUnknownLabel: string;
+  /** A confirmed refusal of an individual read request. */
+  readErrorLabel: string;
+  /** The bulk request is running. */
+  bulkPendingLabel: string;
+  /** The bulk request lost its answer; the server is being reconciled. */
+  bulkUnknownLabel: string;
+  /** A confirmed refusal of the bulk request. */
+  bulkErrorLabel: string;
   /** Day group of the current day. */
   todayLabel: string;
   /** Day group of the previous day. */
@@ -315,6 +331,9 @@ export type IlClassSlot =
   | 'heading'
   | 'filters'
   | 'filter'
+  | 'actions'
+  | 'markAllRead'
+  | 'status'
   | 'updates'
   | 'list'
   | 'group'
@@ -327,6 +346,8 @@ export type IlClassSlot =
   | 'itemBody'
   | 'itemMeta'
   | 'itemTime'
+  | 'itemActivate'
+  | 'itemAction'
   | 'itemUnreadMarker'
   | 'empty'
   | 'loading'

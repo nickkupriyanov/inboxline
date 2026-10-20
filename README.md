@@ -12,16 +12,16 @@ Inboxline belongs to the same family as
 an explicit light theme, pink accent `#ff215a`, CSS variables instead of a
 styling framework, and a framework-free core behind a thin binding.
 
-> **Status: Iteration 13 — ready-made feed.** The framework-free core is
-> implemented: the adapter contract, reducer, derived view, deterministic mock
+> **Status: Iteration 14 — feed actions and activation.** The framework-free core
+> is implemented: the adapter contract, reducer, derived view, deterministic mock
 > adapter, controller and DOM helpers. The stylesheet ships as
 > `@nickkupriyanov/inboxline-core/styles.css` with a copy on the React entry and
 > is documented in [`docs/visual-reference.md`](./docs/visual-reference.md).
 > `@nickkupriyanov/inboxline-react` publishes `InboxProvider`, the ready-made
-> `<Inbox />` feed, `useInboxFlow()` and `useInboxUI()`; the bell layout and the
-> row actions arrive in the following iterations. The plan lives in
-> [`roadmap.md`](./roadmap.md); the implemented contract is recorded in
-> [`docs/specification.md`](./docs/specification.md).
+> `<Inbox />` feed with activation, read/unread and “Mark all as read” actions,
+> `useInboxFlow()` and `useInboxUI()`; the bell layout arrives in Iteration 15. The
+> plan lives in [`roadmap.md`](./roadmap.md); the implemented contract is recorded
+> in [`docs/specification.md`](./docs/specification.md).
 
 ## Packages
 

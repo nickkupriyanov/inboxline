@@ -17,6 +17,8 @@
  * | `data-il-unread="true"`            | a row             | The effective state is unread. Not the only signal: the accessible name repeats it. |
  * | `data-il-pending="true"`           | a row             | An optimistic read operation is queued or in flight.        |
  * | `data-il-unknown="true"`           | a row             | The answer to that operation was lost; the application reconciles. |
+ * | `data-il-error="true"`             | a row             | The last read operation for this row was refused; the status text explains it. |
+ * | `data-il-kind="…"`                 | a status line     | `pending` / `unknown` / `error` — what the text next to an action reports. |
  * | `data-il-status="…"`               | the list, the page | `idle` / `loading` / `ready` / `error` — the status of that load. |
  * | `data-il-empty="true"`             | the list          | Loaded and holding no rows under the current filter.        |
  *
@@ -33,6 +35,9 @@ export const IL_CLASS: Record<IlClassSlot, string> = {
   heading: 'il-heading',
   filters: 'il-filters',
   filter: 'il-filter',
+  actions: 'il-actions',
+  markAllRead: 'il-mark-all-read',
+  status: 'il-status',
   updates: 'il-updates',
   list: 'il-list',
   group: 'il-group',
@@ -45,6 +50,8 @@ export const IL_CLASS: Record<IlClassSlot, string> = {
   itemBody: 'il-item-body',
   itemMeta: 'il-item-meta',
   itemTime: 'il-item-time',
+  itemActivate: 'il-item-activate',
+  itemAction: 'il-item-action',
   itemUnreadMarker: 'il-item-unread-marker',
   empty: 'il-empty',
   loading: 'il-loading',

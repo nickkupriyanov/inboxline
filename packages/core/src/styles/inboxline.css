@@ -7,10 +7,10 @@
    row can be unread, pending and focused at the same time without a modifier
    class per combination.
 
-   Trigger, panel, filters, counter and their state attributes are not here yet:
-   they arrive with their components in Iterations 13 to 16. The root only
-   reads `data-il-layout` and `data-il-theme`, which describe the widget as a
-   whole and are already part of the public naming.
+   Trigger, panel, counter and their state attributes are not here yet: they
+   arrive with their components in Iterations 15 to 16. The root only reads
+   `data-il-layout` and `data-il-theme`, which describe the widget as a whole and
+   are already part of the public naming.
    ========================================================================== */
 
 /* Root --------------------------------------------------------------------- */
@@ -129,6 +129,87 @@
   background: var(--il-accent-soft);
 }
 
+/* The bulk action and the status of the last mutation --------------------- */
+
+/*
+ * The bar stays quiet: the bulk action is secondary to the reading flow, and a
+ * refusal or a reconciliation status shares the same row instead of covering the
+ * list. Only the action itself is disabled while another mutation already owns
+ * the queue, so unrelated rows stay usable.
+ */
+.il-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.il-mark-all-read {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  margin-left: auto;
+  padding: 6px 13px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--il-text-muted);
+  background: var(--il-control);
+  border: 1px solid var(--il-border);
+  border-radius: var(--il-radius-pill);
+  cursor: pointer;
+  transition:
+    color var(--il-duration-fast) var(--il-ease-standard),
+    background var(--il-duration-fast) var(--il-ease-standard),
+    transform var(--il-duration-fast) var(--il-ease-soft);
+}
+
+.il-mark-all-read:hover:not([aria-disabled='true']) {
+  color: var(--il-text);
+  background: var(--il-control-hover);
+}
+
+.il-mark-all-read:active:not([aria-disabled='true']) {
+  transform: scale(0.98);
+}
+
+.il-mark-all-read[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/*
+ * One status line serves a row and the bulk action: `data-il-kind` separates the
+ * transient “saving” text from the amber reconciliation and the red refusal.
+ * Colour is never the only signal; the text itself says what is happening.
+ */
+.il-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--il-text-subtle);
+  overflow-wrap: anywhere;
+}
+
+.il-status[data-il-kind='unknown'] {
+  color: var(--il-warning-ink);
+}
+
+.il-status[data-il-kind='error'] {
+  color: var(--il-danger-ink);
+}
+
+/* The status spinner is smaller than the one that belongs to a full control. */
+.il-status .il-spinner {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+
 /*
  * “Show updates” is the explicit acknowledgement of an external invalidation.
  * It is a full-width action so it reads as a banner rather than a filter.
@@ -228,7 +309,7 @@
  */
 .il-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: start;
   gap: 2px 10px;
   min-width: 0;
@@ -278,6 +359,11 @@
  */
 .il-item[data-il-unknown='true'] {
   box-shadow: inset 0 0 0 1px var(--il-warning);
+}
+
+/* A confirmed refusal is red, but the status text next to the row says it too. */
+.il-item[data-il-error='true'] {
+  box-shadow: inset 0 0 0 1px var(--il-danger);
 }
 
 .il-item[data-il-unknown='true'] .il-item-meta {
@@ -358,6 +444,67 @@
   min-width: 0;
 }
 
+/*
+ * The activation surface is a real button, but it is a sibling of the read
+ * action, never its parent: a nested interactive element would make the read
+ * button impossible to operate with the keyboard.
+ */
+.il-item-activate {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: var(--il-radius-control);
+  cursor: pointer;
+}
+
+.il-item-action {
+  display: grid;
+  place-items: center;
+  grid-column: 3;
+  grid-row: 1;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--il-text-subtle);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--il-radius-pill);
+  cursor: pointer;
+  opacity: 0.6;
+  transition:
+    color var(--il-duration-fast) var(--il-ease-standard),
+    background var(--il-duration-fast) var(--il-ease-standard),
+    opacity var(--il-duration-fast) var(--il-ease-standard);
+}
+
+.il-item:hover .il-item-action,
+.il-item:focus-within .il-item-action {
+  opacity: 1;
+}
+
+.il-item-action:hover:not([aria-disabled='true']) {
+  color: var(--il-text);
+  background: var(--il-control-hover);
+}
+
+.il-item-action[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: progress;
+}
+
+.il-item-action svg {
+  width: 16px;
+  height: 16px;
+}
+
 .il-item-meta {
   display: flex;
   flex-wrap: wrap;
@@ -400,7 +547,7 @@ a.il-item-title {
 
 .il-item-unread-marker {
   align-self: center;
-  grid-column: 3;
+  grid-column: 4;
   width: 7px;
   height: 7px;
   background: var(--il-accent);
@@ -605,6 +752,17 @@ a.il-item-title {
   .il-item {
     gap: 2px 8px;
     padding: 8px;
+  }
+
+  .il-item-action {
+    width: 26px;
+    height: 26px;
+  }
+
+  .il-mark-all-read {
+    width: 100%;
+    margin-left: 0;
+    justify-content: center;
   }
 
   .il-item-avatar,

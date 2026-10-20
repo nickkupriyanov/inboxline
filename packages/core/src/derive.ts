@@ -69,6 +69,14 @@ export interface InboxItemView<TData = unknown> {
   body: string | null;
   author: InboxAuthor | null;
   icon: string | null;
+  /**
+   * The confirmed server object, passed through for application callbacks.
+   *
+   * `read` is the server state; the effective state — including the optimistic
+   * layer — is {@link InboxItemView.read}. The library never rewrites this
+   * object when the visitor asks for a change.
+   */
+  notification: InboxNotification<TData>;
   /** Effective state: the confirmed value unless an optimistic operation overrides it. */
   read: boolean;
   /** `!read`, exposed for styling and for the unread marker. */
@@ -77,6 +85,8 @@ export interface InboxItemView<TData = unknown> {
   pending: boolean;
   /** The answer of this row's individual operation was lost. */
   unknown: boolean;
+  /** A confirmed refusal of this row's operation, or `null`. */
+  actionError: string | null;
   /** Relative while the row is from today, an absolute short date otherwise. */
   timeLabel: string;
   /** Accessible name: title, author, time and the unread marker. */
@@ -162,6 +172,10 @@ export interface InboxActionsView {
   canShowUpdates: boolean;
   /** An individual mutation is queued or in flight, or a bulk operation runs. */
   busy: boolean;
+  /** Where the bulk operation stands; `idle` when none was requested. */
+  bulkStatus: InboxPendingReadStatus | 'idle';
+  /** A confirmed refusal of the bulk operation, or `null`. */
+  bulkError: string | null;
 }
 
 /** Everything a binding renders for one snapshot. */
@@ -289,10 +303,15 @@ export function deriveInboxView<TData = unknown>(
       body: notification.body ?? null,
       author: notification.author ?? null,
       icon: notification.icon ?? null,
+      notification,
       read,
       unread,
       pending: operation?.status === 'pending',
       unknown: operation?.status === 'unknown',
+      actionError:
+        state.actionError?.scope === 'read' && state.actionError.id === notification.id
+          ? messages.readErrorLabel
+          : null,
       timeLabel,
       label: itemLabelOf(notification, timeLabel, unread, config),
       ...(notification.data === undefined ? {} : { data: notification.data }),
@@ -367,6 +386,8 @@ export function deriveInboxView<TData = unknown>(
       canRetryPage: state.pageStatus === 'error',
       canShowUpdates: state.updatesAvailable && state.listStatus !== 'loading',
       busy: state.pending.readOrder.length > 0 || bulk !== null,
+      bulkStatus: bulk?.status ?? 'idle',
+      bulkError: state.actionError?.scope === 'bulk' ? messages.bulkErrorLabel : null,
     },
     live: { message: countLabel ?? messages.countUnknownLabel },
   };

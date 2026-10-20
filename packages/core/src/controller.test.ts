@@ -1231,6 +1231,8 @@ describe('individual read operations', () => {
     expect(snapshot.view.list.items.map((item) => item.id)).toEqual(['a', 'b', 'c']);
     expect(snapshot.state.unreadCount).toBe(3);
     expect(snapshot.view.counter.unreadCount).toBe(3);
+    expect(snapshot.state.actionError).toMatchObject({ scope: 'read', id: 'a' });
+    expect(snapshot.view.list.items[0]?.actionError).toBe('The notification could not be updated');
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0]?.[0]?.outcome).toBe('rejected');
   });
@@ -1652,6 +1654,8 @@ describe('the server-side “mark all read” operation', () => {
     expect(snapshot.view.list.items.every((item) => item.read)).toBe(false);
     expect(snapshot.state.unreadCount).toBe(2);
     expect(snapshot.view.counter.unreadCount).toBe(2);
+    expect(snapshot.state.actionError).toMatchObject({ scope: 'bulk' });
+    expect(snapshot.view.actions.bulkError).toBe('The notifications could not be marked read');
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0]?.[0]?.outcome).toBe('rejected');
   });

@@ -380,6 +380,65 @@ describe('the optimistic layer in the view', () => {
   });
 });
 
+describe('mutation feedback in the view', () => {
+  it('keeps the confirmed notification next to its effective state', () => {
+    const pending = pendingRead(loaded([note('a')]), 'a', true);
+    const item = deriveInboxView(pending, CONFIG, ANCHOR).list.items[0];
+
+    expect(item?.read).toBe(true);
+    expect(item?.notification.read).toBe(false);
+    expect(item?.notification.id).toBe('a');
+  });
+
+  it('shows a refusal only on the row it belongs to', () => {
+    const pending = pendingRead(loaded([note('a'), note('b')]), 'a', true);
+    const refused = inboxReducer(pending, {
+      type: 'readFailed',
+      token: 2,
+      id: 'a',
+      error: FAILURE,
+    });
+    const view = deriveInboxView(refused, CONFIG, ANCHOR);
+
+    expect(view.list.items[0]?.actionError).toBe('The notification could not be updated');
+    expect(view.list.items[1]?.actionError).toBeNull();
+    expect(view.actions.bulkStatus).toBe('idle');
+    expect(view.actions.bulkError).toBeNull();
+  });
+
+  it('describes the running, lost and refused bulk operation', () => {
+    const base = counted(loaded([note('a')]), 1);
+    const pending = inboxReducer(base, { type: 'bulkPending', token: 2 });
+    expect(deriveInboxView(pending, CONFIG, ANCHOR).actions.bulkStatus).toBe('pending');
+
+    const unknown = inboxReducer(pending, { type: 'bulkUnknown', token: 2 });
+    expect(deriveInboxView(unknown, CONFIG, ANCHOR).actions.bulkStatus).toBe('unknown');
+
+    const refused = inboxReducer(pending, {
+      type: 'bulkFailed',
+      token: 2,
+      error: FAILURE,
+    });
+    const view = deriveInboxView(refused, CONFIG, ANCHOR);
+    expect(view.actions.bulkStatus).toBe('idle');
+    expect(view.actions.bulkError).toBe('The notifications could not be marked read');
+  });
+
+  it('uses the Russian action copy', () => {
+    const base = counted(loaded([note('a')]), 1);
+    const pending = inboxReducer(base, { type: 'bulkPending', token: 2 });
+    const refused = inboxReducer(pending, {
+      type: 'bulkFailed',
+      token: 2,
+      error: FAILURE,
+    });
+    const view = deriveInboxView(refused, RU, ANCHOR);
+
+    expect(view.actions.bulkError).toBe('Не удалось отметить уведомления прочитанными');
+    expect(RU.messages.markReadLabel).toBe('Отметить прочитанным');
+  });
+});
+
 describe('action availability', () => {
   it('allows “mark all read” only with a known non-zero counter and an idle queue', () => {
     const ready = counted(loaded([]), 3);

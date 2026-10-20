@@ -95,6 +95,11 @@ export interface InboxProviderProps<TData = unknown, TContextData = unknown> {
    * replaceable parts; the application navigates from here.
    */
   onNotificationClick?(notification: InboxNotification<TData>): void;
+  /**
+   * Whether activating an unread notification asks the controller to mark it
+   * read. Default: `true`. The request does not delay the click callback.
+   */
+  markReadOnOpen?: boolean;
   /** A request failed in a way the application may want to surface. */
   onError?(error: InboxError): void;
 
@@ -143,6 +148,8 @@ export interface InboxUI<TData = unknown> {
   open: boolean;
   /** Asks to open or close the panel; in controlled mode this only calls `onOpenChange`. */
   setOpen(open: boolean): void;
+  /** Whether activating an unread row also marks it read. */
+  markReadOnOpen: boolean;
   /** The prepared activation handler for the replaceable notification part. */
   onNotificationClick?(notification: InboxNotification<TData>): void;
 }

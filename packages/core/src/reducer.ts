@@ -53,6 +53,19 @@ export type InboxPageStatus = 'idle' | 'loading' | 'error';
 /** Where one individual read operation stands. */
 export type InboxPendingReadStatus = 'pending' | 'unknown';
 
+/**
+ * The last confirmed refusal of a mutation.
+ *
+ * Only a `rejected` outcome is kept here: a lost answer stays visible on the
+ * operation itself (`pending.reads[id].status === 'unknown'` or
+ * `pending.bulk.status === 'unknown'`) and is settled by reconciliation rather
+ * than reported as a refusal. The entry starts no request and blocks nothing; it
+ * exists so a binding can explain the rollback next to the row or the bulk
+ * control. A new mutation, a confirmation or a different filter clears it.
+ */
+export type InboxActionError =
+  { scope: 'read'; id: string; error: InboxError } | { scope: 'bulk'; error: InboxError };
+
 /* -------------------------------------------------------------------------- */
 /*  The optimistic layer                                                      */
 /* -------------------------------------------------------------------------- */
@@ -161,6 +174,14 @@ export interface InboxState<TData = unknown> {
   /** The optimistic layer, deliberately separate from the confirmed rows. */
   pending: InboxPendingState;
   /**
+   * The last confirmed refusal, or `null`.
+   *
+   * It never writes confirmed data: the optimistic layer has already been
+   * retracted when this is set. A lost answer is not a refusal and is represented
+   * in `pending` instead.
+   */
+  actionError: InboxActionError | null;
+  /**
    * An external change was reported and the loaded list has not absorbed it yet.
    *
    * The flag is raised by an invalidation from the adapter and cleared by the
@@ -209,6 +230,7 @@ export function createInboxState<TData = unknown>(
     countStatus: 'idle',
     countError: null,
     pending: { reads: {}, readOrder: [], bulk: null },
+    actionError: null,
     updatesAvailable: false,
     listToken: 0,
     pageToken: 0,
@@ -272,7 +294,7 @@ export type InboxAction<TData = unknown> =
       notification: InboxNotification<TData>;
       unreadCount: number;
     }
-  | { type: 'readFailed'; token: number; id: string }
+  | { type: 'readFailed'; token: number; id: string; error?: InboxError }
   | { type: 'readUnknown'; token: number; id: string }
   | { type: 'bulkPending'; token: number }
   /**
@@ -281,7 +303,7 @@ export type InboxAction<TData = unknown> =
    * the server counter is installed as is — it is not necessarily zero.
    */
   | { type: 'bulkConfirmed'; token: number; boundary: string; unreadCount: number }
-  | { type: 'bulkFailed'; token: number }
+  | { type: 'bulkFailed'; token: number; error?: InboxError }
   | { type: 'bulkUnknown'; token: number }
   /**
    * A fresh authoritative page and counter have arrived, so the operations
@@ -430,6 +452,8 @@ export function inboxReducer<TData = unknown>(
         listError: null,
         pageStatus: 'idle',
         pageError: null,
+        // A refusal belonged to the list the visitor has just left.
+        actionError: null,
         // The counter is server data for the whole context, so the filter never
         // moves it. The generations move instead: an answer to the request of
         // the previous filter must not repopulate the list.
@@ -540,6 +564,8 @@ export function inboxReducer<TData = unknown>(
       const queued = Object.hasOwn(state.pending.reads, action.id);
       return {
         ...state,
+        // A new user request supersedes the explanation of the previous refusal.
+        actionError: null,
         pending: {
           ...state.pending,
           // The layer holds one desired state per id and never touches the
@@ -574,6 +600,7 @@ export function inboxReducer<TData = unknown>(
         unreadCount: action.unreadCount,
         countStatus: 'ready',
         countError: null,
+        actionError: null,
         pending: {
           ...state.pending,
           reads: withoutKey(state.pending.reads, action.notification.id),
@@ -586,9 +613,15 @@ export function inboxReducer<TData = unknown>(
       const operation = state.pending.reads[action.id];
       if (!operation || operation.token !== action.token) return state;
       // A confirmed refusal rolls back this operation only: the layer goes, the
-      // confirmed data and every other operation stay.
+      // confirmed data and every other operation stay. The error is kept next to
+      // the row so the binding can explain the rollback, while an abandonment
+      // (no `error`) leaves the previous explanation alone.
       return {
         ...state,
+        actionError:
+          action.error === undefined
+            ? state.actionError
+            : { scope: 'read', id: action.id, error: action.error },
         pending: {
           ...state.pending,
           reads: withoutKey(state.pending.reads, action.id),
@@ -642,6 +675,7 @@ export function inboxReducer<TData = unknown>(
     case 'bulkPending':
       return {
         ...state,
+        actionError: null,
         // The bulk operation is the whole layer for its duration. It never
         // writes a row or the counter: the derivation projects it, and dropping
         // the entry is the complete rollback.
@@ -660,6 +694,7 @@ export function inboxReducer<TData = unknown>(
         unreadCount: action.unreadCount,
         countStatus: 'ready',
         countError: null,
+        actionError: null,
         pending: {
           ...state.pending,
           bulk: null,
@@ -670,9 +705,12 @@ export function inboxReducer<TData = unknown>(
     case 'bulkFailed': {
       if (state.pending.bulk?.token !== action.token) return state;
       // A confirmed refusal retracts the whole optimistic layer; the confirmed
-      // rows and the server counter were never touched.
+      // rows and the server counter were never touched. An abandonment carries
+      // no error and therefore does not invent one.
       return {
         ...state,
+        actionError:
+          action.error === undefined ? state.actionError : { scope: 'bulk', error: action.error },
         pending: {
           ...state.pending,
           bulk: null,

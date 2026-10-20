@@ -35,6 +35,7 @@ export function InboxProvider<TData = unknown, TContextData = unknown>(
 ): JSX.Element {
   const { children } = props;
   const theme = props.theme ?? 'dark';
+  const markReadOnOpen = props.markReadOnOpen ?? true;
   const { controller, setFilter, open, setOpen } = useInboxController(props);
 
   const snapshot = useSyncExternalStore(
@@ -61,11 +62,21 @@ export function InboxProvider<TData = unknown, TContextData = unknown>(
       setFilter,
       open,
       setOpen,
+      markReadOnOpen,
       ...(props.onNotificationClick === undefined
         ? {}
         : { onNotificationClick: props.onNotificationClick }),
     }),
-    [theme, config, snapshot.state.filter, setFilter, open, setOpen, props.onNotificationClick],
+    [
+      theme,
+      config,
+      snapshot.state.filter,
+      setFilter,
+      open,
+      setOpen,
+      markReadOnOpen,
+      props.onNotificationClick,
+    ],
   );
 
   return (

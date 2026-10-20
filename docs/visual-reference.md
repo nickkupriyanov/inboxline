@@ -159,11 +159,14 @@ map between Inboxline and the chapters of the reference stylesheets:
 | `heading`          | `.sl-title`                          | 17 px, 650, ellipsis.                         |
 | `filters`          | `.sl-tabs`                           | Segmented pill around two native buttons.     |
 | `filter`           | `.sl-tab`                            | 12.5 px, selected state from `aria-pressed`.  |
+| `actions`          | `.sl-toolbar`                        | Quiet row for the bulk action and its status. |
+| `markAllRead`      | `.sl-secondary-button`               | Pill, `aria-disabled` instead of `disabled`.  |
+| `status`           | `.sl-status`                         | Small textual pending/unknown/refusal line.   |
 | `updates`          | `.sl-secondary-button`               | Full-width accent-soft acknowledgement.       |
 | `list`             | `.sn-queue-list`                     | Scrolls only in the popover.                  |
 | `group`            | day groups — new                     | One day of rows.                              |
 | `groupLabel`       | `.sl-weekday` / `.sn-queue-count`    | 11.5 px, uppercase, subtle.                   |
-| `item`             | `.sn-track-item`                     | Grid: leading tile, text, marker.             |
+| `item`             | `.sn-track-item`                     | Grid: tile, text, read action, marker.        |
 | `itemAvatar`       | `.sn-artwork`                        | Round, 36 px, image cover.                    |
 | `itemIcon`         | `.sl-slots-icon`                     | Rounded tile, accent-soft.                    |
 | `itemContent`      | `.sn-track-info`                     | The flexible text column.                     |
@@ -171,6 +174,8 @@ map between Inboxline and the chapters of the reference stylesheets:
 | `itemBody`         | — new                                | 12.5 px, muted, wraps.                        |
 | `itemMeta`         | `.sn-track-line` / `.sn-queue-count` | Author and other meta; 11.5 px subtle.        |
 | `itemTime`         | `.sn-track-duration`                 | Right-aligned, tabular numbers, no movement.  |
+| `itemActivate`     | `.sn-track-item` (button reset)      | The row's main button; title/body/meta.       |
+| `itemAction`       | `.sl-icon-button`                    | 28 px read/unread circle; visible on hover.   |
 | `itemUnreadMarker` | `.sl-day-dot`                        | 7 px accent dot with a soft halo.             |
 | `empty`            | `.sn-empty`                          | Dashed panel, centered.                       |
 | `loading`          | `.sl-skeleton`                       | Shimmer from the two skeleton tokens.         |
@@ -190,8 +195,10 @@ The stylesheet reads these states:
 | `data-il-unread="true"`    | Unread surface, hover surface and visible marker.                     |
 | `data-il-pending="true"`   | `cursor: progress` and a pulsing marker; the text keeps its contrast. |
 | `data-il-unknown="true"`   | Amber inset ring and amber meta text; paired with a textual status.   |
+| `data-il-error="true"`     | Danger inset ring on the refused row; paired with its status text.    |
+| `data-il-kind="…"`         | A status line: subtle, amber (`unknown`) or danger (`error`).         |
 | `data-il-disabled="true"`  | No pointer input; header and list at 60% opacity.                     |
-| `aria-disabled="true"`     | A single row at 55% opacity and no pointer input.                     |
+| `aria-disabled="true"`     | A busy read action or bulk button at reduced opacity.                 |
 
 `data-il-status` and `data-il-empty` are documented for the DOM contract but do
 not need a visual rule: the loading, empty and error blocks are rendered as their
@@ -257,9 +264,9 @@ is new; the visual language is not.
 ## 6. Limits of this iteration
 
 - The stylesheet covers the feed parts that exist in `IL_CLASS`. Trigger, panel,
-  filters, counter, replaceable parts and their layout attributes arrive with
-  their components in Iterations 13–16; no empty placeholder class is published
-  ahead of them.
+  counter, replaceable parts and their layout attributes arrive with their
+  components in Iterations 15–16; no empty placeholder class is published ahead
+  of them.
 - There is no animation layer yet. `il-shimmer` and `il-pulse` are state feedback,
   not the open/close and row-exit choreography of Iteration 17.
   `--il-row-max-height` is reserved for that work.

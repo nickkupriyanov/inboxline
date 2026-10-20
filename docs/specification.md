@@ -28,7 +28,7 @@ work; this file owns the descriptions.
 | `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 9) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model, the deterministic mock adapter and the controller lifecycle, filters, paging, mutations and external invalidations. |
 | `@nickkupriyanov/inboxline-core/dom`         | Browser helpers (Iteration 10)                           | Focus around a non-modal panel, element size observation and the viewport-constrained area around an anchor; no React, no import-time browser access.                                                                                                                                |
 | `@nickkupriyanov/inboxline-core/styles.css`  | Stylesheet (Iteration 11)                                | Plain CSS: `--il-*` design tokens for both themes, a scoped base layer, the feed root, rows and list states. Built into `dist/inboxline.css`.                                                                                                                                        |
-| `@nickkupriyanov/inboxline-react`            | Provider and headless hooks (Iteration 12)               | `InboxProvider`, `useInboxFlow()`, `useInboxUI()`, the provider props and the flow/UI types. Ready-made layouts — Iteration 13 onwards.                                                                                                                                              |
+| `@nickkupriyanov/inboxline-react`            | Provider and headless hooks (Iteration 12)               | `InboxProvider`, `useInboxFlow()`, `useInboxUI()`, the provider props and the flow/UI types. The ready-made feed, including its actions, arrived in Iterations 13–14.                                                                                                                |
 | `@nickkupriyanov/inboxline-react/styles.css` | Copy of the core stylesheet (Iteration 11)               | Byte copy of `dist/inboxline.css`, made by the React post-build step.                                                                                                                                                                                                                |
 | `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                                                                          |
 
@@ -306,6 +306,7 @@ the optimistic layer apart from each other:
 | `unreadCount`                          | `number \| null`                           | The server counter; `null` means “not known yet”, never a confirmed zero. |
 | `countStatus` / `countError`           | `InboxLoadStatus` / `InboxError \| null`   | The counter load.                                                         |
 | `pending`                              | `InboxPendingState`                        | The optimistic layer, deliberately separate from `byId`.                  |
+| `actionError`                          | `InboxActionError \| null`                 | The last confirmed refusal, scoped to one row or to the bulk action.      |
 | `updatesAvailable`                     | `boolean`                                  | An invalidation is waiting for an explicit reload of the first page.      |
 | `listToken`, `pageToken`, `countToken` | `number`                                   | The generation each request was started with.                             |
 
@@ -321,21 +322,28 @@ the failure reaches `onError`), and an operation whose answer was lost stays wit
 or `null`; it is one operation for the whole context, so it never appears in
 `readOrder`.
 
+`actionError` is `{ scope: 'read', id, error }` or `{ scope: 'bulk', error }`. It
+holds only a confirmed refusal: a lost answer is represented by the operation's
+`unknown` status and is settled by reconciliation, never reported as a refusal.
+The entry starts no request and blocks nothing; a new mutation, a confirmation,
+a filter change or a context change clears it. A binding uses it to explain the
+rollback next to the row or the bulk control.
+
 | Action                                         | Effect                                                                                                                                                                          |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `contextChanged(contextKey)`                   | A different user/workspace: rows, counter, paging, pending, the update flag and generations all start over. The filter is kept.                                                 |
 | `externalUpdate`                               | Raises `updatesAvailable` once per burst; the rows, the counter and the layer are untouched.                                                                                    |
-| `setFilter(filter)`                            | Empties the rows and the paging, keeps the counter and the pending layer, supersedes the in-flight first page.                                                                  |
+| `setFilter(filter)`                            | Empties the rows and the paging, keeps the counter and the pending layer, clears `actionError`, and supersedes the in-flight first page.                                        |
 | `listLoading` / `listLoaded` / `listFailed`    | Loading, replacing the chain with a first page, or failing while keeping what is on screen. `listLoaded` also states whether an invalidation is still awaiting acknowledgement. |
 | `pageLoading` / `pageLoaded` / `pageFailed`    | Appending a page; a failure keeps the rows and the cursor, so the same page can be retried.                                                                                     |
 | `countLoading` / `countLoaded` / `countFailed` | Loading the counter; a failure keeps the previous value, including `null`.                                                                                                      |
 | `readPending`                                  | Records one desired read state in the layer, without touching `byId` or `unreadCount`.                                                                                          |
-| `readConfirmed`                                | Writes the confirmed row (only if it is already loaded) and the server counter, and drops the operation.                                                                        |
-| `readFailed`                                   | Rolls back that operation only.                                                                                                                                                 |
+| `readConfirmed`                                | Writes the confirmed row (only if it is already loaded) and the server counter, drops the operation and clears `actionError`.                                                   |
+| `readFailed`                                   | Rolls back that operation only; a confirmed refusal is stored in `actionError`, an abandonment is not.                                                                          |
 | `readUnknown`                                  | Keeps the operation, marked `unknown`.                                                                                                                                          |
-| `bulkPending`                                  | Records the whole-context operation in `pending.bulk`, without touching the rows or the counter.                                                                                |
-| `bulkConfirmed`                                | Marks loaded rows at or before the server boundary read, installs the server counter and drops the layer.                                                                       |
-| `bulkFailed`                                   | Rolls back the bulk layer only.                                                                                                                                                 |
+| `bulkPending`                                  | Records the whole-context operation in `pending.bulk`, without touching the rows or the counter; clears `actionError`.                                                          |
+| `bulkConfirmed`                                | Marks loaded rows at or before the server boundary read, installs the server counter, drops the layer and clears `actionError`.                                                 |
+| `bulkFailed`                                   | Rolls back the bulk layer only; a confirmed refusal is stored in `actionError`, an abandonment is not.                                                                          |
 | `bulkUnknown`                                  | Keeps the bulk layer as `unknown`.                                                                                                                                              |
 | `readsReconciled`                              | A fresh authoritative page and counter arrived: drops the operations marked `unknown`, leaves the pending ones.                                                                 |
 
@@ -391,6 +399,12 @@ the library never opens a link — and `onError(error)`; a cancelled request nev
 reaches `onError`. The controlled UI values (`open`/`defaultOpen`/`onOpenChange`,
 `filter`/`defaultFilter`/`onFilterChange`) belong to the binding and are
 described in section 4; they reach the core through these actions.
+
+`onNotificationClick` belongs to the same callback type, but activation is a UI
+event: the core has no action that means “the visitor opened this row”. The
+ready-made feed calls the provider's handler with the confirmed notification, and
+a custom UI calls `useInboxUI().onNotificationClick` itself. The library never
+opens a link and never invents an activation.
 
 ### Filters and paging
 
@@ -448,7 +462,10 @@ so two clients or a repeated click can never flip a row by accident.
   late answer is dropped by the identity check.
 - **A refusal rolls back one operation.** `readFailed` removes only that layer
   entry, so new notifications and other successful changes survive; the failure
-  reaches `onError` with `outcome: 'rejected'`.
+  reaches `onError` with `outcome: 'rejected'`. The state also keeps the last
+  refusal in `actionError`, and the derived row exposes its localized text as
+  `actionError`; it is cleared by the next mutation, a confirmation or a filter
+  change.
 - **A lost answer is not a refusal.** Anything that does not state an outcome —
   a thrown transport error, a timeout, a closed connection — becomes an
   `InboxError` with `outcome: 'unknown'`. The operation stays visible as
@@ -496,7 +513,9 @@ individual queue.
   into a failure.
 - **A refusal retracts the guess.** `bulkFailed` drops `pending.bulk`; the
   confirmed rows and the server counter were never touched, so the list returns to
-  its previous state. `onError` receives the confirmed `rejected` outcome.
+  its previous state. `onError` receives the confirmed `rejected` outcome, and
+  `actionError` keeps it scoped to the bulk control as the localized
+  `actions.bulkError`.
 - **A lost answer is reconciled, never repeated.** Anything that states no
   outcome becomes an `InboxError` with `outcome: 'unknown'`, `bulkUnknown` keeps
   the layer visible, and the controller refreshes the first page and counter.
@@ -519,15 +538,15 @@ resolved configuration and an `InboxTimeAnchor`, and returns the whole
 `InboxView<TData>` a binding renders. It never reads the clock, never touches the
 DOM and never calls an adapter, so a binding does not format a date a second time.
 
-| Part       | Contents                                                                                                              |
-| ---------- | --------------------------------------------------------------------------------------------------------------------- |
-| `settings` | `locale`, `timeZone`, `filter`, `contextKey`.                                                                         |
-| `counter`  | `unreadCount` (`null` while unknown), `known`, the plural `label`, the load `status`, `loading`, a localized `error`. |
-| `list`     | `status`, `loading`, `error`, `empty`, `emptyLabel`, `loadingLabel`, `label`, `count`, `items`, `groups`.             |
-| `page`     | `status`, `loading`, `error`, `hasMore`, `canLoadMore`, `label`, `retryLabel`.                                        |
-| `updates`  | `available` (an invalidation is waiting) and `label` (“Show updates”).                                                |
-| `actions`  | `canRefresh`, `canLoadMore`, `canMarkAllRead`, `canRetryList`, `canRetryPage`, `canShowUpdates`, `busy`.              |
-| `live`     | The polite announcement of the current counter.                                                                       |
+| Part       | Contents                                                                                                                            |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `settings` | `locale`, `timeZone`, `filter`, `contextKey`.                                                                                       |
+| `counter`  | `unreadCount` (`null` while unknown), `known`, the plural `label`, the load `status`, `loading`, a localized `error`.               |
+| `list`     | `status`, `loading`, `error`, `empty`, `emptyLabel`, `loadingLabel`, `label`, `count`, `items`, `groups`.                           |
+| `page`     | `status`, `loading`, `error`, `hasMore`, `canLoadMore`, `label`, `retryLabel`.                                                      |
+| `updates`  | `available` (an invalidation is waiting) and `label` (“Show updates”).                                                              |
+| `actions`  | `canRefresh`, `canLoadMore`, `canMarkAllRead`, `canRetryList`, `canRetryPage`, `canShowUpdates`, `busy`, `bulkStatus`, `bulkError`. |
+| `live`     | The polite announcement of the current counter.                                                                                     |
 
 Rules the derivation guarantees:
 
@@ -537,11 +556,14 @@ Rules the derivation guarantees:
    `timeLabel` is relative inside today and an absolute short date otherwise.
 2. **The optimistic layer shows.** A row's `read`/`unread` are the effective
    values — a queued operation wins over the confirmed one — and `pending`/
-   `unknown` describe that operation. A pending or `unknown` bulk operation makes
-   every loaded row read until its boundary or a reconciliation replaces the
-   guess. A rolled-back operation is simply absent again, and the confirmed row
-   shows through. In the `unread` filter a row whose effective state is read is
-   not rendered, so the selection stays honest while the operation settles.
+   `unknown` describe that operation. `notification` stays the confirmed server
+   object for application callbacks, so a binding never mistakes an optimistic
+   guess for the server state. `actionError` appears only on the row whose last
+   operation was refused. A pending or `unknown` bulk operation makes every
+   loaded row read until its boundary or a reconciliation replaces the guess. A
+   rolled-back operation is simply absent again, and the confirmed row shows
+   through. In the `unread` filter a row whose effective state is read is not
+   rendered, so the selection stays honest while the operation settles.
 3. **The counter is server data.** `unreadCount` stays `null` and `known` stays
    `false` until the server reports a number, and `label` stays `null` until then.
    Pending operations are projected onto that number, one step per row and based
@@ -561,6 +583,10 @@ Rules the derivation guarantees:
 configRevision, time)` is `stateRevision | configRevision | today | minuteBucket`,
    and `createInboxViewMemo()` returns the very same object for the same key, so a
    binding can compare the snapshot by reference.
+7. **Mutation feedback is derived, not recomputed.** `actions.bulkStatus` is
+   `idle`, `pending` or `unknown`; `actions.bulkError` is the localized refusal of
+   the bulk action. Row labels and statuses come from `InboxMessages`, so a custom
+   dictionary changes them without a second copy in the binding.
 
 Configuration (`resolveInboxConfig`) validates `locale` and `timeZone` against
 `Intl` and falls back to deterministic constants (`en`, `UTC`) instead of the
@@ -571,9 +597,9 @@ markup; `selectPlural()` chooses the form with `Intl.PluralRules`.
 
 Stable classes are listed by `IL_CLASS` and keyed by `IlClassSlot`. State a
 stylesheet reacts to is written as a `data-il-*` attribute (`data-il-unread`,
-`data-il-pending`, `data-il-unknown`, `data-il-status`, `data-il-empty`) rather
-than as modifier classes; trigger, panel, filter and counter slots arrive with
-their components in later iterations.
+`data-il-pending`, `data-il-unknown`, `data-il-error`, `data-il-kind`,
+`data-il-status`, `data-il-empty`) rather than as modifier classes; trigger,
+panel and counter slots arrive with their components in later iterations.
 
 ## 3. Data model and adapter
 
@@ -918,23 +944,24 @@ const { unreadCount } = assertInboxUnreadCount(await counterResponse.json());
 
 ## 4. React binding
 
-**Implemented in Iterations 12–13** (`packages/react/src/`). The package publishes
+**Implemented in Iterations 12–14** (`packages/react/src/`). The package publishes
 four runtime exports and the types below; the bell arrives in Iteration 15 and
 uses the same surface.
 
-| Export          | Purpose                                                                                         |
-| --------------- | ----------------------------------------------------------------------------------------------- |
-| `InboxProvider` | Owns one core controller, starts and stops it, and supplies the flow and UI contexts.           |
-| `Inbox`         | The ready-made feed: header, filters, day groups, rows, paging and states.                      |
-| `useInboxFlow`  | The headless flow: `{ snapshot, actions }` from the nearest provider.                           |
-| `useInboxUI`    | Presentation values and the controlled UI state: theme, locale, copy, filter, open and setters. |
+| Export          | Purpose                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| `InboxProvider` | Owns one core controller, starts and stops it, and supplies the flow and UI contexts.            |
+| `Inbox`         | The ready-made feed: header, filters, rows, read actions, “Mark all as read”, paging and states. |
+| `useInboxFlow`  | The headless flow: `{ snapshot, actions }` from the nearest provider.                            |
+| `useInboxUI`    | Presentation values, copy and controlled UI state: theme, locale, filter, open and setters.      |
 
 The provider props are `adapter`, `context`, `config`, `clock`, `theme`, the
 controlled pairs `filter`/`defaultFilter`/`onFilterChange` and
-`open`/`defaultOpen`/`onOpenChange`, `onNotificationClick`, `onError` and
-`children`. `InboxFlow<TData, TContextData>` and `InboxUI<TData>` are public
-types; the domain types are re-exported from the core so a consumer needs one
-import.
+`open`/`defaultOpen`/`onOpenChange`, `onNotificationClick`, `markReadOnOpen`
+(default `true`), `onError` and `children`. `InboxFlow<TData, TContextData>` and
+`InboxUI<TData>` are public types; `InboxUI` exposes the resolved `markReadOnOpen`
+so a custom row makes the same decision as the ready-made one. The domain types
+are re-exported from the core so a consumer needs one import.
 
 ### The ready-made feed
 
@@ -957,6 +984,30 @@ every date, counter, group and availability flag comes from
 - Unread is carried by the row surface, the marker and a visually hidden “Unread”
   label. The time stays tabular and the title and body wrap instead of overflowing;
   the feed has no fixed height.
+- A row has two independent controls: the activation button (title, body, author
+  and time) and the read/unread button next to it. They are siblings, never
+  nested; a row without `onNotificationClick` and without an active
+  `markReadOnOpen` renders as plain text. The read button has the accessible name
+  “Mark as read/unread: {title}”, and its icon is `aria-hidden`.
+- Activation calls `onNotificationClick` with the confirmed
+  `item.notification`, not the optimistic view. When `markReadOnOpen` is `true`
+  and the row is unread, it also calls `actions.setRead(id, true)`; the two do not
+  wait for each other, and an exception thrown by the callback is contained and
+  never turns a successful request into a failure.
+- The action bar appears while the counter is known and non-zero, or while a bulk
+  operation or its refusal is on screen. “Mark all as read” uses `aria-disabled`
+  plus a guarded handler, so a focused control is not replaced by an unfocusable
+  `disabled` button when the individual queue is busy. A bulk refusal leaves the
+  rows and the counter untouched.
+- Row statuses are text, not colour alone: `Saving…` while the operation is
+  queued or in flight, `Checking with the server…` with an amber ring for a lost
+  answer, and the localized refusal with a red ring in `role="alert"`. The status
+  sits next to the row and does not disable unrelated rows; only the core contract
+  blocks individual actions while a bulk operation runs.
+- In the unread filter, a row disappears as soon as its read request is queued.
+  Focus then moves to the same control of the next row, then the previous row, and
+  finally to the active “Unread” filter button. It moves only when the removed
+  control still owned focus, so a click elsewhere is not stolen.
 - Loading the first page shows three skeleton rows with a status label. The loaded
   empty state uses the filter-specific copy. A failed first page keeps any existing
   rows, shows an alert with a retry, and a failed next page is a smaller strip above
@@ -965,16 +1016,18 @@ every date, counter, group and availability flag comes from
   disabled while that page loads and disappears at the end of the list. An external
   invalidation appears as an explicit “Show updates” button and does not reorder
   the open list before it is used.
-- The counter is announced through the hidden polite live region. The feed does
-  not duplicate the global counter in its header; the bell trigger owns the badge
-  in Iteration 15.
+- The counter is announced through the hidden polite live region; row and bulk
+  statuses use their own `role="status"` / `role="alert"`, so the whole list is
+  not read again after a change. The feed does not duplicate the global counter in
+  its header; the bell trigger owns the badge in Iteration 15.
 - Filters, paging and updates work in both controlled and uncontrolled modes
   because they call `useInboxUI().setFilter`; the feed never decides the filter on
-  its own.
+  its own. Read actions always go through `actions.setRead` and
+  `actions.markAllRead`, so a custom UI and the ready-made feed share one queue.
 
-Row activation, read/unread buttons, “Mark all as read” and the pending/unknown
-row status belong to Iteration 14, the bell panel to Iteration 15, and replaceable
-parts to Iteration 16. Until then a row is a presentational list item.
+The bell panel belongs to Iteration 15 and replaceable parts to Iteration 16; the
+feed already uses the class slots (`actions`, `markAllRead`, `status`,
+`itemActivate`, `itemAction`) that those parts will receive.
 
 ### Lifecycle
 
@@ -990,8 +1043,10 @@ parts to Iteration 16. Until then a row is a presentational list item.
   Strict Mode double mount therefore leaves one active adapter subscription, and
   a late answer of a stopped or replaced source is discarded by the controller.
 - Callbacks are read from the latest props on every call. A re-render with a new
-  `onError` or `onNotificationClick` never recreates the controller, and an
-  exception inside a callback stays contained in the core.
+  `onError` or `onNotificationClick` never recreates the controller. The ready-made
+  feed contains an exception from `onNotificationClick` itself, after the
+  independent read request has left; `onError` follows the core rule and is called
+  after the state already holds the failure.
 - `useSyncExternalStore(controller.subscribe, controller.getSnapshot,
 controller.getSnapshot)` is the only subscription. Both hooks under one
   provider receive the same snapshot object; two providers own two controllers
@@ -1233,5 +1288,16 @@ the visual selection and the announced state cannot drift. A broken avatar falls
 back to initials and a broken icon to an inline glyph, while a row with neither
 renders no leading tile. The global counter is announced by the feed's live region
 but is not repeated in the header; the bell badge owns that presentation in
-Iteration 15. Row activation, read actions and the pending/unknown row status
-remain absent until Iteration 14.
+Iteration 15.
+
+Resolved in Iteration 14: the row is two sibling native buttons, not one nested
+control. Activation calls `onNotificationClick` with the confirmed notification
+and optionally starts `setRead` at the same time; neither waits for the other,
+and a callback exception is contained after the request has left. `markReadOnOpen`
+is resolved by the provider and exposed through `useInboxUI()`. A confirmed
+refusal is core state (`actionError`) and appears as localized row or bulk text,
+while a lost answer stays `unknown` and is reconciled. The bulk button uses
+`aria-disabled` with a guarded handler so focus survives a busy queue. In the
+unread filter, the used control's focus moves to the next row, then the previous
+one, and finally to the active filter; it is not stolen if focus moved elsewhere.
+The bell panel remains Iteration 15 and replaceable parts Iteration 16.

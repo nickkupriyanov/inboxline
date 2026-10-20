@@ -955,7 +955,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
         return;
       }
 
-      apply({ type: 'readFailed', token: operation.token, id: operation.id });
+      apply({ type: 'readFailed', token: operation.token, id: operation.id, error: failure });
       reportError(failure);
     } finally {
       // An event that arrived while the mutation was in flight makes its counter
@@ -1055,7 +1055,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
         return;
       }
 
-      apply({ type: 'bulkFailed', token });
+      apply({ type: 'bulkFailed', token, error: failure });
       reportError(failure);
     } finally {
       // An event that arrived while the operation ran was not part of its
