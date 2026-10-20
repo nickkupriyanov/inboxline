@@ -1,0 +1,25 @@
+{
+  "name": "inboxline-install-check-react18",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "prerender": "node scripts/prerender.mjs",
+    "ssr": "node scripts/ssr-check.mjs"
+  },
+  "dependencies": {
+    "@nickkupriyanov/inboxline-core": "injected by tools/verify-install.mjs",
+    "@nickkupriyanov/inboxline-react": "injected by tools/verify-install.mjs",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "6.1.2",
+    "jsdom": "30.1.2",
+    "typescript": "5.9.3",
+    "vite": "8.3.4"
+  }
+}

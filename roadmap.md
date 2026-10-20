@@ -11,7 +11,7 @@
   [AGENTS.md](./AGENTS.md).
 - **Исходное состояние на 18 октября 2026:** подготовлены только план и правила.
   Разработка начата отдельной командой пользователя на Iteration 0.
-- **Текущая итерация:** Iteration 22 — Браузерные регрессии · ✅ готово.
+- **Текущая итерация:** Iteration 23 — Упаковка и установка потребителями · ✅ готово.
 
 Создание этих документов само по себе не запускает Iteration 0: разработка
 начинается отдельной командой и останавливается на ревью каждой итерации.
@@ -1570,21 +1570,52 @@ sandbox тестового раннера; это ограничение harness
 окружении. Публичный API не менялся, changeset не добавлялся. Статус итерации — ✅ готово;
 следующая итерация ожидает отдельной команды.
 
-### Iteration 23 — Упаковка и установка потребителями · ⬜ не начато
+### Iteration 23 — Упаковка и установка потребителями · ✅ готово
 
 **Цель:** проверить библиотеку как устанавливаемый пакет, а не только workspace-source.
 
-- [ ] Проверить ESM/CJS, declarations, exports, CSS-подпути и sideEffects.
-- [ ] Добавить tarball-install consumers для React 18 и React 19.
-- [ ] Проверить импорт core в Node, React render/hydration и отсутствие обязательного Motion.
-- [ ] Проверить отдельный `/motion` с установленным peer и отсутствие его в default bundle.
-- [ ] Убедиться, что tarball содержит README/LICENSE/CSS/types и не содержит fixtures,
+- [x] Проверить ESM/CJS, declarations, exports, CSS-подпути и sideEffects.
+- [x] Добавить tarball-install consumers для React 18 и React 19.
+- [x] Проверить импорт core в Node, React render/hydration и отсутствие обязательного Motion.
+- [x] Проверить отдельный `/motion` с установленным peer и отсутствие его в default bundle.
+- [x] Убедиться, что tarball содержит README/LICENSE/CSS/types и не содержит fixtures,
       локальных env, результатов тестов и случайных артефактов.
 
 **Проверки:** `verify:install` на собранных tarball без исходных workspace-alias,
 реальный consumer build и CSS-render, оценка размера с описанием методики.
 
 **На ревью:** оба потребителя устанавливаются и работают из готовых пакетов.
+
+**Фактически сделано:** оба пакета теперь публикуют `README.md` рядом с
+`LICENSE` и `dist` (`files` обновлён), добавлен `tools/verify-install.mjs`.
+Скрипт собирает и пакует core и React, проверяет экспортные карты (`.`, `/dom`,
+`/motion`, `/styles.css`), `sideEffects: **/*.css`, наличие README/LICENSE,
+ESM/CJS, declarations и CSS, отсутствие `src/`, тестов, env, tsconfig, Storybook
+и workspace-протокола в зависимостях, а также optional-peer `motion`. Три чистых
+consumer-приложения ставятся из tarball через `npm` со своим cache и без
+workspace-alias: `react-18`, `react-19` и `react-19-motion`.
+
+Каждый default-leg проходит `tsc --noEmit`, production `vite build`, проверку
+CSS-токенов в собранном stylesheet, отсутствие Motion-маркера в default bundle,
+Node `renderToString` + jsdom hydration, prerender в `dist/index.html` и
+гидратацию в Chromium с проверкой `--il-accent`/`--il-radius-card`, core `/dom`
+и headless-счётчика. Motion-leg ставит peer и собирает отдельный `/motion`,
+проверяя `data-il-motion` в бандле. Все три леги зелёные: React 18 — 195.8 KiB JS
+
+- 17.9 KiB CSS, React 19 — 273.5 KiB JS + 17.9 KiB CSS, motion — 392.8 KiB JS;
+  tarball core 204.4 KiB, react 202.0 KiB (с source maps; методика — размер
+  собранных ассетов и `.tgz`). Добавлен patch-changeset: README в tarball, runtime
+  не менялся.
+
+**Известные ограничения:** проверка ставит пакеты через `npm` из `file:`-tarball
+и требует сети для React/Vite/TypeScript/jsdom; офлайн-воспроизводимость не
+заявляется. Браузерный шаг требует Chromium из `pnpm install:browsers` и
+запускается в одном движке. Motion-leg проверяет сборку и маркер, но не
+SSR/hydration. В tarball остаются source maps — это осознанный вывод сборки, а не
+случайный артефакт. Версии пока `0.0.0`, публикация этими командами не
+выполняется; Windows-путь скрипта не проверялся, текущая проверка — macOS.
+CI и release automation остаются Iterations 25. Статус итерации — ✅ готово;
+следующая итерация ожидает отдельной команды.
 
 ### Iteration 24 — Документация и миграционные правила · ⬜ не начато
 

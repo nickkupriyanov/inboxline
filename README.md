@@ -96,6 +96,8 @@ pnpm demo:http     # the teaching server and the playground together
 pnpm test:server   # HTTP contract and controller-over-HTTP tests
 pnpm install:browsers  # Playwright Chromium, Firefox and WebKit inside the workspace
 pnpm test:browser  # cross-browser layout, states, SSR and reduced-motion checks
+pnpm verify:install        # pack both packages, install three clean consumer apps
+pnpm verify:install:leg react-19  # one consumer leg
 pnpm storybook     # run Storybook on http://localhost:6006
 pnpm build-storybook  # build the static Storybook
 pnpm ssr           # run the SSR/hydration example on http://localhost:4175
@@ -129,11 +131,13 @@ inboxline/
     dev-server/      teaching HTTP server, payload-translating adapter and tests
                      (private, not published)
     browser-checks/  Playwright Chromium/Firefox/WebKit regressions (private)
+    install-check/   React 18, React 19 and motion consumer templates (private)
+    verify-install.mjs  packs the packages and builds the consumer legs
 ```
 
 CI arrives in the iteration listed in the roadmap. Storybook, the stories and
 `tools/dev-server` are development tooling: the published packages contain
-`dist` only.
+`dist`, `README.md` and `LICENSE` only.
 
 ## License
 

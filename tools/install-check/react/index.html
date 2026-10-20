@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Inboxline install check</title>
+  </head>
+  <body>
+    <!-- `#root` is filled by scripts/prerender.mjs after the build and then
+         hydrated; `#extra` holds client-only probes and never takes part in the
+         hydration comparison. -->
+    <div id="root"></div>
+    <div id="extra"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1708,8 +1708,55 @@ sequences. Chromium, Firefox and WebKit each pass all 22 tests in the recorded r
   concatenates the three authored files in a fixed order, and the React package
   copies the result. `sideEffects` lists `**/*.css`, so tree-shaking keeps the
   published file.
-- Package `README.md` files, the playground, Storybook, `tools/` and CI belong
-  to later iterations and are not part of the scaffold.
+- Each package ships its own `README.md` and `LICENSE` in the tarball; the
+  scaffolding note that they belonged to a later iteration is obsolete. CI
+  remains a later iteration.
+
+### Packaging and consumer installs
+
+**Implemented in Iteration 23** (`tools/verify-install.mjs`,
+`tools/install-check/`). `pnpm build` alone only proves the workspace compiles;
+the packaging check proves a consumer can install the published artifacts.
+
+`node tools/verify-install.mjs` (or `pnpm verify:install`) builds and packs core
+and React in order, then checks the packed manifests and contents:
+
+- `.`, `/dom` (core), `/motion` (React) and `/styles.css` are present in the
+  export maps, and `sideEffects` still declares `**/*.css`;
+- README, LICENSE, ESM/CJS builds, declarations and `dist/inboxline.css` are in
+  the tarball; `src/`, tests, env files, tsconfig, Storybook output and other
+  workspace files are not;
+- the React tarball depends on core without a `workspace:` protocol and keeps
+  `motion` as an optional peer.
+
+Three clean consumer apps are installed from the tarballs with their own npm
+cache and no workspace aliases:
+
+| Leg               | Proves                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| `react-18`        | TypeScript, production Vite build, CSS tokens, core `/dom`, SSR + hydration, headless hook. |
+| `react-19`        | The same on React 19.                                                                       |
+| `react-19-motion` | The optional `motion` peer is installed and the separate `/motion` entry builds.            |
+
+The default legs must build **without** `motion` and their bundle must not contain
+the Motion kit marker. Each default leg runs `tsc --noEmit`, a production
+`vite build`, a Node `renderToString()` + jsdom hydration, a prerender step that
+puts the server markup into `dist/index.html`, and a Chromium hydration check
+(`tools/browser-checks/scripts/check-consumer.mjs`) that also reads the computed
+`--il-accent`/`--il-radius-card` tokens, exercises the core `/dom` entry and the
+headless counter. The motion leg compiles and builds with the peer and the bundle
+must contain `data-il-motion`.
+
+Recorded sizes in Iteration 23: core tarball 204.4 KiB, React tarball 202.0 KiB;
+React 18 consumer assets 195.8 KiB JS + 17.9 KiB CSS, React 19 273.5 KiB JS +
+17.9 KiB CSS, motion entry 392.8 KiB JS. Sizes include source maps where the
+build emits them and are evidence, not a budget.
+
+Boundaries: the check installs from `file:` tarballs and needs network access for
+React, Vite, TypeScript and jsdom; it is not an offline reproducibility test. The
+browser step needs the Playwright Chromium build from `pnpm install:browsers`.
+Versions are still `0.0.0` with Changesets driving the release; nothing is
+published by these commands. CI and release automation remain Iterations 25.
 
 ## 8. Open questions
 

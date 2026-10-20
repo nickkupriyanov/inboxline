@@ -28,7 +28,9 @@
     "demo:http": "node tools/dev-server/dev.mjs",
     "test:server": "pnpm --filter @nickkupriyanov/inboxline-dev-server test",
     "test:browser": "pnpm --filter @nickkupriyanov/inboxline-browser-checks test:browser",
-    "install:browsers": "pnpm --filter @nickkupriyanov/inboxline-browser-checks install:browsers"
+    "install:browsers": "pnpm --filter @nickkupriyanov/inboxline-browser-checks install:browsers",
+    "verify:install": "node tools/verify-install.mjs",
+    "verify:install:leg": "node tools/verify-install.mjs --leg"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
