@@ -7,7 +7,7 @@
  * bell with the feed under one provider. Real geometry is covered by the pure
  * placement tests; jsdom has no layout engine.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -149,6 +149,55 @@ describe('Inbox bell', () => {
 
     expect(document.querySelector('[data-il-closing="true"]')).toBeNull();
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('returns focus to the trigger when the application closes the panel under reduced motion', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => true,
+      })),
+    );
+
+    const adapter = createFixtureAdapter({ pageSize: 4 });
+
+    function Host({ open }: { open: boolean }) {
+      return (
+        <InboxProvider
+          adapter={adapter}
+          context={CONTEXT_A}
+          clock={testClock}
+          theme="dark"
+          config={{ locale: 'en', timeZone: 'UTC' }}
+          open={open}
+          onOpenChange={() => {}}
+        >
+          <Inbox />
+        </InboxProvider>
+      );
+    }
+
+    const { rerender } = render(<Host open />);
+    const dialog = await screen.findByRole('dialog', { name: 'Notifications' });
+    const filter = within(dialog).getByRole('button', { name: 'Unread' });
+    filter.focus();
+    expect(document.activeElement).toBe(filter);
+
+    // The application closes the panel, not Escape or the close button. Under
+    // reduced motion the panel is removed in the same commit.
+    rerender(<Host open={false} />);
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Notifications. 3 unread notifications' }),
+    );
   });
 
   it('reopens during the exit without stacking a second panel', async () => {
@@ -310,6 +359,45 @@ describe('Inbox bell', () => {
     fireEvent.scroll(window);
 
     await waitFor(() => expect(dialog.style.top).toBe('352px'));
+  });
+
+  it('places the panel at a root-scoped --il-width-panel override', async () => {
+    // `classNames.root` reaches `.il-root` only; the bell keeps its own token.
+    // The panel has to be the token source or this supported override is lost.
+    const style = document.createElement('style');
+    style.textContent = `
+      .il-root.wide-panel { --il-width-panel: 520px; }
+      .il-root.narrow-panel { --il-width-panel: 340px; }
+    `;
+    document.head.append(style);
+
+    try {
+      const first = renderBell({ pageSize: 4 }, { classNames: { root: 'wide-panel' } });
+      const firstTrigger = await screen.findByRole('button', {
+        name: 'Notifications. 3 unread notifications',
+      });
+      fireEvent.click(firstTrigger);
+
+      let dialog = await screen.findByRole('dialog', { name: 'Notifications' });
+      expect(dialog.classList.contains('wide-panel')).toBe(true);
+      await waitFor(() => expect(dialog.style.width).toBe('520px'));
+      first.unmount();
+
+      // A smaller override is honoured too; the viewport cap is covered by the
+      // pure placement tests and the browser suite.
+      const second = renderBell({ pageSize: 4 }, { classNames: { root: 'narrow-panel' } });
+      const secondTrigger = await screen.findByRole('button', {
+        name: 'Notifications. 3 unread notifications',
+      });
+      fireEvent.click(secondTrigger);
+
+      dialog = await screen.findByRole('dialog', { name: 'Notifications' });
+      expect(dialog.classList.contains('narrow-panel')).toBe(true);
+      await waitFor(() => expect(dialog.style.width).toBe('340px'));
+      second.unmount();
+    } finally {
+      style.remove();
+    }
   });
 
   it('follows the controlled open value owned by the application', async () => {

@@ -343,6 +343,15 @@ interface ActiveRequest {
    * first page keeps the “updates available” flag and a counter read asks again.
    */
   readonly invalidationRevision: number;
+  /**
+   * The confirmed-mutation generation the request was started in.
+   *
+   * A confirmed read or bulk answer is newer server truth than a first page that
+   * was requested before it. Such a page is not applied: it would put a row back
+   * into the state the server has already left. The controller asks for the
+   * first page again instead.
+   */
+  readonly confirmedRevision: number;
 }
 
 /**
@@ -551,6 +560,13 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
   let subscriptionRevision = 0;
   /** Bumped by every invalidation; the value a request started in is stored with it. */
   let invalidationRevision = 0;
+  /**
+   * Bumped whenever the server confirms a read or bulk mutation.
+   *
+   * A first page requested before that confirmation describes older server state.
+   * It is not drawn over the confirmed row; the list is reloaded instead.
+   */
+  let confirmedRevision = 0;
   /**
    * The invalidation generation a counter request has already been attempted for.
    *
@@ -761,6 +777,13 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
       ) as InboxPage<TData>;
 
       if (activeList !== request) return false;
+      if (request.confirmedRevision !== confirmedRevision) {
+        // The page was requested before the server confirmed a read or bulk
+        // change. Its rows describe older truth, so they must not overwrite the
+        // confirmed layer: ask for the first page again against the new server
+        // state. This is a read, never a repeat of the mutation.
+        return loadList();
+      }
       apply({
         type: 'listLoaded',
         token: request.token,
@@ -865,6 +888,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
       token: (nextToken += 1),
       controller: new AbortController(),
       invalidationRevision,
+      confirmedRevision,
     };
     activeList = request;
     apply({ type: 'listLoading', token: request.token });
@@ -885,6 +909,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
       token: (nextToken += 1),
       controller: new AbortController(),
       invalidationRevision,
+      confirmedRevision,
     };
     activePage = request;
     requestedCursors.add(cursor);
@@ -902,6 +927,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
       token: (nextToken += 1),
       controller: new AbortController(),
       invalidationRevision,
+      confirmedRevision,
     };
     activeCount = request;
     apply({ type: 'countLoading', token: request.token });
@@ -1031,6 +1057,8 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
         notification: result.notification,
         unreadCount: result.unreadCount,
       });
+      // A first page that started earlier is now older than this confirmed row.
+      confirmedRevision += 1;
       // The answer carries a counter, but only an operation that started after
       // the latest invalidation describes that invalidation. Otherwise the
       // change may postdate it and the counter is read again below.
@@ -1136,6 +1164,8 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
         boundary: result.boundary,
         unreadCount: result.unreadCount,
       });
+      // Any first page requested before this boundary is older truth.
+      confirmedRevision += 1;
       // The counter and the boundary already describe the confirmed change; a
       // fresh first page is what shows the events created after the boundary
       // and the rows that the operation covered without loading them first.
@@ -1221,6 +1251,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     // counter is not asked again just because the list failed (and vice versa).
     // A failed first page replaces the chain, so retrying the page of the old
     // chain at the same time would race with that replacement.
+    const revision = sourceRevision;
     const pending: Promise<boolean>[] = [];
     if (state.listStatus === 'error') {
       pending.push(loadList());
@@ -1229,6 +1260,20 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     }
     if (state.countStatus === 'error') pending.push(loadCount());
     await Promise.all(pending);
+
+    // A retry that recovered the last failed reads is the same evidence a
+    // refresh gives: both halves of the server state are now known, so lost
+    // answers can be settled without repeating the mutation. The reconciliation
+    // path of a lost answer has already replaced the failed loads; this covers
+    // the click on “Try again” in the finished interface.
+    if (
+      hasUnknownOperations() &&
+      revision === sourceRevision &&
+      state.listStatus === 'ready' &&
+      state.countStatus === 'ready'
+    ) {
+      apply({ type: 'readsReconciled' });
+    }
   }
 
   /* -- the actions ---------------------------------------------------------- */

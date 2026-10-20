@@ -867,13 +867,25 @@ a.il-item-title {
  * The root already fits 320 px because its width is capped and its grid gives
  * the text column all remaining space. These rules only tighten the insets and
  * the leading tile so a long title still has room at that width.
+ *
+ * The threshold is measured on the content box: the default 400 px card keeps
+ * 370 px inside its padding and border, so 379 px used to fire on the standard
+ * panel and push the close action onto a line of its own. 360 px leaves that
+ * default untouched. Below it, the heading and close share the first row and the
+ * filters take the second, whatever the DOM order of those three blocks is.
  */
-@container inboxline (max-width: 379px) {
+@container inboxline (max-width: 359px) {
   .il-heading {
+    flex: 1 1 auto;
     font-size: 16px;
   }
 
+  .il-panel-close {
+    margin-left: auto;
+  }
+
   .il-filters {
+    order: 3;
     width: 100%;
     margin-left: 0;
   }

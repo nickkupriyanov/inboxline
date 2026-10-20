@@ -193,7 +193,16 @@ owns the data flow and returns a `getSnapshot()`, a `subscribe()`, the lifecycle
   that are in the error state, leaving a successful list or counter untouched. A
   failed next page is retried from the same cursor; when the first page itself
   failed, its successful retry replaces the chain instead of racing a page of
-  the old one.
+  the old one. When the retry recovers both loads and an answer is still
+  `unknown`, the same confirmed list and counter settle it through
+  `readsReconciled`, exactly as a successful `refresh()` would; the mutation is
+  never repeated.
+- A first page requested before a confirmed `setRead()` or `markAllRead()` is
+  older server truth than that confirmation. Its late answer is not applied: the
+  controller requests the first page again instead of letting the page restore a
+  row the server has already changed. The confirmed row and counter stay visible
+  while the fresh page is loading, and the extra request is a read, not a repeat
+  of the mutation.
 - The list and the counter are independent: each has its own status, error and
   request generation, so either can fail while the other succeeds. Until the
   server reports a counter it stays `null`, never a confirmed zero.
@@ -384,18 +393,18 @@ resolves when the operation has settled, successfully or not, and never rejects:
 a failure is reported through `onError` and through the snapshot, so a binding
 never needs a `.catch()` to keep a console clean.
 
-| Action                | Meaning                                                                                                                         |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `setFilter(filter)`   | Selects the list filter. The global counter is not affected.                                                                    |
-| `refresh()`           | Reloads the first page and the counter, replacing the loaded list.                                                              |
-| `retry()`             | Repeats exactly the loads that failed, including a failed page at the same cursor; with nothing failed it does nothing.         |
-| `loadMore()`          | Appends the next page of the current filter and context; one request at a time, and a repeated cursor ends the list.            |
-| `setRead(id, read)`   | Sets a desired read state; the change is queued until the server confirms it. `read` is a state, not a toggle.                  |
-| `markAllRead()`       | Marks every notification of the context read on the server, including the ones never loaded; runs outside the individual queue. |
-| `showUpdates()`       | Applies an invalidation the adapter announced; does nothing when none is pending, otherwise it behaves like `refresh()`.        |
-| `reconcile()`         | Reads the server state again after an unknown outcome, without retrying the operation.                                          |
-| `setContext(context)` | Replaces the context; in-flight work of the previous one is abandoned.                                                          |
-| `setAdapter(adapter)` | Replaces the adapter; in-flight work of the previous one is abandoned.                                                          |
+| Action                | Meaning                                                                                                                                       |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setFilter(filter)`   | Selects the list filter. The global counter is not affected.                                                                                  |
+| `refresh()`           | Reloads the first page and the counter, replacing the loaded list.                                                                            |
+| `retry()`             | Repeats exactly the loads that failed, including a failed page at the same cursor; a recovered list and counter also settle unknown outcomes. |
+| `loadMore()`          | Appends the next page of the current filter and context; one request at a time, and a repeated cursor ends the list.                          |
+| `setRead(id, read)`   | Sets a desired read state; the change is queued until the server confirms it. `read` is a state, not a toggle.                                |
+| `markAllRead()`       | Marks every notification of the context read on the server, including the ones never loaded; runs outside the individual queue.               |
+| `showUpdates()`       | Applies an invalidation the adapter announced; does nothing when none is pending, otherwise it behaves like `refresh()`.                      |
+| `reconcile()`         | Reads the server state again after an unknown outcome, without retrying the operation.                                                        |
+| `setContext(context)` | Replaces the context; in-flight work of the previous one is abandoned.                                                                        |
+| `setAdapter(adapter)` | Replaces the adapter; in-flight work of the previous one is abandoned.                                                                        |
 
 Callbacks are `onNotificationClick(notification)` — the application navigates,
 the library never opens a link — and `onError(error)`; a cancelled request never
@@ -1092,6 +1101,11 @@ a second controller: every date, counter, group and availability flag comes from
   empty state uses the filter-specific copy. A failed first page keeps any existing
   rows, shows an alert with a retry, and a failed next page is a smaller strip above
   the unchanged rows.
+- A failed counter is its own compact alert above the actions: it names the
+  failure, offers the same retry action and leaves a successfully loaded list on
+  screen. The previous server value, or “unknown”, stays in the badge; the strip
+  never turns an unknown counter into a confirmed zero. The retry repeats only
+  the failed counter, because the list is still valid.
 - The next page is a native button with an explicit “Show more” label; it uses
   `aria-disabled` plus a guarded handler while that page loads, so the focus stays on the
   control, and it disappears at the end of the list. An external invalidation appears as
@@ -1140,16 +1154,26 @@ read the same snapshot and the same controller.
   `@nickkupriyanov/inboxline-core/dom`, so a scroll of any ancestor, a window
   resize or an anchor resize re-places it. The panel is right-aligned to the
   trigger, shifted left only when the viewport margin requires it, and its width
-  is `min(400px, viewport − 2 × 8px)`: on a 320 px screen it is 304 px wide, not a
-  source of horizontal scroll. The side with more free space wins; the panel is
-  expressed with `top` below the trigger or `bottom` above it, and `max-height` is
-  capped to the free space minus an 8 px gap. `data-il-side` exposes the chosen
-  side to CSS and tests.
+  is `min(var(--il-width-panel), viewport − 2 × 8px)`: on a 320 px screen it is
+  304 px wide, not a source of horizontal scroll. The binding reads the resolved
+  `--il-width-panel` from the panel's own token scope, falling back to the
+  trigger only before the panel is mounted; `classNames.root` therefore applies
+  even though it adds a class to `.il-root` but not to `.il-bell`. The panel is
+  re-placed in a layout effect before paint, so a root-only override never renders
+  a frame at the compiled-in 400 px. The compiled-in 400 px is only the fallback
+  for a value that is not a simple `px`/`rem` length. The side with more free space
+  wins; the panel is expressed with `top` below the trigger or `bottom` above it,
+  and `max-height` is capped to the free space minus an 8 px gap. `data-il-side`
+  exposes the chosen side to CSS and tests.
 - **Focus.** Opening from the trigger moves focus to the dialog, whose heading is
   announced. The panel does not trap Tab. Escape closes it and returns focus to
   the trigger; the close button does the same. A pointer outside closes it without
   moving focus, so the element the visitor clicked keeps it. An `open` value
-  changed by the application does not move focus on its own.
+  changed by the application does not move focus on its own, but closing it while
+  focus was inside the panel returns focus to the trigger. That also holds under
+  reduced motion, where the panel unmounts in one commit: the last focus owner is
+  recorded, so the fallback does not depend on a ref that has already been
+  cleared, and it still never steals focus from an element focused outside.
 - **Theme and tokens.** The trigger lives in `.il-bell`, which is a token scope like
   `.il-root`; the portalled panel keeps `.il-root` and the same `data-il-theme`, so
   the portal cannot lose the palette. The close action is a native button with the

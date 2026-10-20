@@ -243,6 +243,49 @@ describe('Inbox filters and paging', () => {
     expect(screen.queryByText('The notifications could not be loaded')).toBeNull();
   });
 
+  it('explains a counter failure without hiding the loaded rows and retries it', async () => {
+    const adapter = createFixtureAdapter({ pageSize: 4 });
+    adapter.failNext('getUnreadCount');
+    render(
+      <InboxProvider adapter={adapter} context={CONTEXT_A} clock={testClock}>
+        <Inbox layout="feed" />
+      </InboxProvider>,
+    );
+
+    // The list is independent of the counter: its rows are still there.
+    await screen.findByText('Fourth');
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('The unread count could not be loaded');
+    expect(screen.queryByText('The notifications could not be loaded')).toBeNull();
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() =>
+      expect(screen.queryByText('The unread count could not be loaded')).toBeNull(),
+    );
+    expect(await screen.findByText('3 unread notifications')).toBeTruthy();
+    expect(screen.getByText('Fourth')).toBeTruthy();
+  });
+
+  it('keeps a known counter while its later load fails and offers another retry', async () => {
+    const { adapter } = renderFeed({ pageSize: 4 });
+    await screen.findByText('3 unread notifications');
+
+    adapter.failNext('getUnreadCount');
+    adapter.invalidate(CONTEXT_A);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('The unread count could not be loaded');
+    // The previous server value stays instead of becoming a confirmed zero.
+    expect(screen.getByText('3 unread notifications')).toBeTruthy();
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+    await waitFor(() =>
+      expect(screen.queryByText('The unread count could not be loaded')).toBeNull(),
+    );
+    expect(screen.getByText('3 unread notifications')).toBeTruthy();
+  });
+
   it('shows the loading state before the first rows and an empty state under a filter', async () => {
     const loading = renderFeed({ pageSize: 2, latencyMs: 40 });
     expect(screen.getByText('Loading notifications…')).toBeTruthy();

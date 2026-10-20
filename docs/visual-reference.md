@@ -255,15 +255,22 @@ marked with `aria-disabled` or the root attribute, not by colour alone.
 
 ## 4. Geometry and narrow containers
 
-- The popover is 400 px and the feed 800 px, or 100% of a narrower parent. The
-  portalled panel is additionally capped by the viewport: it is
-  `min(400px, viewport − 2 × 8px)`, so a 320 px window shows a 304 px panel and
-  never horizontal scroll.
+- The popover is 400 px and the feed 800 px, or 100% of a narrower parent. Both
+  come from their tokens: a consumer may set `--il-width-panel` on the panel scope
+  (for example `520px` through `classNames.root`), and the binding uses that
+  resolved value for placement and the viewport cap instead of keeping the
+  compiled-in 400 px inline. The portalled panel is additionally capped by the
+  viewport: `min(var(--il-width-panel), viewport − 2 × 8px)`, so a 320 px window
+  shows a 304 px panel and never horizontal scroll.
 - The bell trigger is a 44 px round control with a 19 px accent badge. It sits in
   the `.il-bell` token scope; the panel keeps the `.il-root` card and its theme.
 - Both work at 320 px: the root caps its width, the grid gives the text column
   all remaining space, long titles and bodies use `overflow-wrap: anywhere`, and
-  a container query tightens the insets and the leading tile below 380 px.
+  a content-box container query below 360 px tightens the insets and the leading
+  tile. That threshold leaves the standard 400 px card (370 px inside padding and
+  border) on its one-row header. On narrow cards the heading and close action
+  share the first row and the filters take the second; the close action does not
+  wrap onto a line of its own.
 - There is no horizontal scrolling and no fixed height on the feed. The popover
   list has a 340 px cap; the header stays in place and the rows scroll.
 - The layout is chosen by the layout attribute, never by the viewport width, so

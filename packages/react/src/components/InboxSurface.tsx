@@ -434,6 +434,22 @@ export function InboxSurface({
           close={close}
         />
 
+        {/* The counter can fail on its own while the loaded rows stay valid. The
+            compact strip explains it and retries only the failed counter; it
+            does not replace the list with an error state. */}
+        {view.counter.error === null ? null : (
+          <PageError
+            message={view.counter.error}
+            retryLabel={ui.messages.retryLabel}
+            onRetry={() => void actions.retry()}
+            slotProps={{
+              className: cls('pageError'),
+              role: 'alert',
+              'data-il-counter-error': 'true',
+            }}
+          />
+        )}
+
         {!showMarkAllRead ? null : (
           <div className={cls('actions')}>
             {bulkStatusText === null ? null : (

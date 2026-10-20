@@ -11,7 +11,7 @@
  * Reopening asks the controller for a fresh first page. Closing only hides the
  * panel; the provider keeps its lifecycle and its subscription.
  */
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, ComponentPropsWithRef, JSX } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -25,11 +25,43 @@ import { useMediaQuery } from './hooks/useMediaQuery';
 import type { SlotProps } from './parts';
 import { InboxSurface } from './components/InboxSurface';
 import { BellIcon } from './components/icons';
-import { placeInboxPanel } from './components/panelPlacement';
+import { placeInboxPanel, INBOX_PANEL_WIDTH } from './components/panelPlacement';
 import type { InboxPanelPlacement } from './components/panelPlacement';
 
 /** How long the panel stays mounted for its exit. Mirrors `--il-duration`. */
 const PANEL_EXIT_DURATION = 240;
+
+/**
+ * A layout effect on the client and a passive effect on the server.
+ *
+ * Placement is a browser concern; the isomorphic alias keeps a server render
+ * from warning about `useLayoutEffect` while the panel is still absent.
+ */
+const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
+/**
+ * The width the popover actually resolves to, not the compiled-in default.
+ *
+ * The element passed in is the token source: the open panel when it exists,
+ * otherwise the trigger. The panel is authoritative because the public
+ * `classNames.root` override adds a class to `.il-root` only; the trigger keeps
+ * the bell's default. Simple lengths are resolved; anything else keeps the
+ * documented default and lets the stylesheet cap it to the container.
+ */
+function resolvePanelWidth(element: HTMLElement | null): number {
+  if (element === null || typeof getComputedStyle !== 'function') return INBOX_PANEL_WIDTH;
+
+  const value = getComputedStyle(element).getPropertyValue('--il-width-panel').trim();
+  const match = /^(\d+(?:\.\d+)?)(px|rem)$/.exec(value);
+  if (match === null) return INBOX_PANEL_WIDTH;
+
+  const amount = Number.parseFloat(match[1] as string);
+  if (!Number.isFinite(amount) || amount <= 0) return INBOX_PANEL_WIDTH;
+  if (match[2] === 'px') return amount;
+
+  const rootSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+  return Number.isFinite(rootSize) && rootSize > 0 ? amount * rootSize : INBOX_PANEL_WIDTH;
+}
 
 /** The bell and the non-modal dialog it opens. */
 export function InboxBell(): JSX.Element {
@@ -43,9 +75,23 @@ export function InboxBell(): JSX.Element {
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
+  /** The last area the observer measured, reused when only the width changes. */
+  const availableAreaRef = useRef<AvailableArea | null>(null);
+  /** The panel width the current placement was derived from. */
+  const panelWidthRef = useRef<number | null>(null);
   const openFromTriggerRef = useRef(false);
   const wasOpenRef = useRef(open);
   const lastOpenRef = useRef(open);
+  /**
+   * Whether focus was last seen inside the panel.
+   *
+   * Under reduced motion the panel unmounts in the same commit as `open=false`,
+   * so by the time the effect runs the browser has already moved focus to the
+   * body and the panel ref is gone. Recording the last ownership lets the close
+   * still return focus to the trigger without stealing it from an element the
+   * visitor chose outside.
+   */
+  const focusInsidePanelRef = useRef(false);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [mounted, setMounted] = useState(false);
   const [exitPending, setExitPending] = useState(false);
@@ -68,8 +114,51 @@ export function InboxBell(): JSX.Element {
     if (!open) return undefined;
 
     return observeAvailableArea(triggerRef.current, (area: AvailableArea | null) => {
-      setPlacement(area === null ? null : placeInboxPanel(area));
+      availableAreaRef.current = area;
+      if (area === null) {
+        setPlacement(null);
+        return;
+      }
+      // The open panel is the authoritative token scope: `classNames.root` adds
+      // a class to `.il-root` only, so the trigger alone would still report the
+      // bell's default width. While the panel is not mounted yet, the trigger's
+      // value gives the first placement and the layout effect below corrects it
+      // before paint.
+      const width = resolvePanelWidth(panelRef.current ?? triggerRef.current);
+      setPlacement(placeInboxPanel(area, { width }));
     });
+  }, [open]);
+
+  // The panel can carry a root-only width override that the bell does not have.
+  // Reading it after mount and re-placing before paint keeps such a consumer
+  // override out of the inline 400 px default without rendering a wrong frame.
+  useIsomorphicLayoutEffect(() => {
+    if (!open) {
+      panelWidthRef.current = null;
+      return;
+    }
+
+    const panel = panelRef.current;
+    const area = availableAreaRef.current;
+    if (panel === null || area === null) return;
+
+    const width = resolvePanelWidth(panel);
+    if (panelWidthRef.current === width) return;
+    panelWidthRef.current = width;
+    setPlacement(placeInboxPanel(area, { width }));
+  });
+
+  // Remember whether an ordinary focus move landed inside the panel. The close
+  // effect cannot ask the ref after an immediate unmount.
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const onFocusIn = (event: FocusEvent): void => {
+      focusInsidePanelRef.current = panelRef.current?.contains(event.target as Node) ?? false;
+    };
+
+    document.addEventListener('focusin', onFocusIn);
+    return () => document.removeEventListener('focusin', onFocusIn);
   }, [open]);
 
   // Closing keeps the panel mounted for its exit and marks it inert immediately;
@@ -81,15 +170,31 @@ export function InboxBell(): JSX.Element {
       exitTimerRef.current = null;
     };
 
+    /**
+     * A close moves focus back only when it belonged to the panel. A pointer
+     * outside deliberately focused another element, and the trigger is not
+     * allowed to steal it.
+     */
+    const focusBelongsToPanel = (): boolean => {
+      const panel = panelRef.current;
+      const active = document.activeElement;
+      if (panel !== null) return panel.contains(active);
+      return (active === null || active === document.body) && focusInsidePanelRef.current;
+    };
+
     if (open) {
       clearExit();
       lastOpenRef.current = true;
+      focusInsidePanelRef.current = false;
       setExitPending(false);
       return;
     }
 
     if (reducedMotion) {
       clearExit();
+      if (lastOpenRef.current && focusBelongsToPanel()) {
+        restoreFocus(triggerRef.current);
+      }
       lastOpenRef.current = false;
       setExitPending(false);
       return;
@@ -101,10 +206,7 @@ export function InboxBell(): JSX.Element {
     // A controlled close can happen while focus is inline: the panel is about to
     // leave the interaction tree, so focus goes back to the anchor rather than
     // staying in an inert element.
-    const panel = panelRef.current;
-    if (panel !== null && panel.contains(document.activeElement)) {
-      restoreFocus(triggerRef.current);
-    }
+    if (focusBelongsToPanel()) restoreFocus(triggerRef.current);
 
     setExitPending(true);
     exitTimerRef.current = setTimeout(() => {

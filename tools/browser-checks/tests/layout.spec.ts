@@ -133,6 +133,86 @@ test.describe('layout and containers', () => {
     await expect(panel).toHaveCount(0);
   });
 
+  test('the close action stays on the heading row at 400 and 320 px', async ({ page }) => {
+    const trigger = page.locator('[data-il-case="popover-open"] button.il-trigger');
+    const triggerTop = await trigger.evaluate(
+      (element) => element.getBoundingClientRect().top + window.scrollY,
+    );
+    await page.evaluate((top) => window.scrollTo(0, Math.max(0, top - 120)), triggerTop);
+    const panel = page.locator('[role="dialog"]');
+    await expect(panel).toBeVisible();
+    await page.waitForTimeout(250);
+
+    const boxes = async () => {
+      const heading = await panel.locator('.il-heading').boundingBox();
+      const close = await panel.locator('.il-panel-close').boundingBox();
+      const filters = await panel.locator('.il-filters').boundingBox();
+      expect(heading).not.toBeNull();
+      expect(close).not.toBeNull();
+      expect(filters).not.toBeNull();
+      return { heading: heading!, close: close!, filters: filters! };
+    };
+
+    // The standard 400 px card has three blocks on one row: the close action is
+    // not pushed under the filters by the content-box container query.
+    const standard = await boxes();
+    expect(standard.close.y - standard.heading.y).toBeLessThan(6);
+    expect(standard.close.x).toBeGreaterThan(standard.heading.x);
+    expect(Math.abs(standard.close.y - standard.filters.y)).toBeLessThan(6);
+
+    await page.setViewportSize({ width: 320, height: 700 });
+    await page.waitForTimeout(250);
+
+    // At 320 px the heading and close share the first row and the filters take
+    // the next one; the close action is still top-right, never on a third line.
+    const narrow = await boxes();
+    expect(narrow.close.y - narrow.heading.y).toBeLessThan(6);
+    expect(narrow.close.x).toBeGreaterThan(narrow.heading.x);
+    expect(narrow.filters.y).toBeGreaterThanOrEqual(narrow.close.y + narrow.close.height - 1);
+  });
+
+  test('the panel follows the consumer --il-width-panel token and caps it to the viewport', async ({
+    page,
+  }) => {
+    const trigger = page.locator('[data-il-case="popover-open"] button.il-trigger');
+    const triggerTop = await trigger.evaluate(
+      (element) => element.getBoundingClientRect().top + window.scrollY,
+    );
+    await page.evaluate((top) => window.scrollTo(0, Math.max(0, top - 120)), triggerTop);
+    const panel = page.locator('[role="dialog"]');
+    await expect(panel).toBeVisible();
+    await page.waitForTimeout(250);
+
+    const panelWidth = async (): Promise<number> =>
+      Math.round((await panel.boundingBox())?.width ?? 0);
+
+    // The token belongs to the panel scope (`.il-root`), which is also where a
+    // `classNames.root` override lands. Setting it on the bell alone is not the
+    // supported path and intentionally does not win.
+    const reopenWithWidth = async (token: string): Promise<void> => {
+      await page.addStyleTag({
+        content: `.il-root[data-il-layout='popover'] { --il-width-panel: ${token}; }`,
+      });
+      await trigger.click();
+      await expect(panel).toHaveCount(0);
+      await trigger.click();
+      await expect(panel).toBeVisible();
+      await page.waitForTimeout(250);
+    };
+
+    await reopenWithWidth('520px');
+    expect(await panelWidth()).toBe(520);
+
+    await reopenWithWidth('340px');
+    expect(await panelWidth()).toBe(340);
+
+    await page.setViewportSize({ width: 320, height: 700 });
+    await page.waitForTimeout(250);
+    expect(await panelWidth()).toBeLessThanOrEqual(304);
+    const box = await panel.boundingBox();
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(320);
+  });
+
   test('a 200% zoom is emulated by halving the CSS viewport', async ({ page }) => {
     // A 1280 px window at 200% has a 640 CSS px layout viewport. Browser-level
     // page zoom itself is not scriptable cross-browser; this is the documented

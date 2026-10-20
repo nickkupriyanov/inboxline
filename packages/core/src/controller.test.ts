@@ -1463,14 +1463,96 @@ describe('individual read operations', () => {
     expect(controller.getSnapshot().state.unreadCount).toBe(1);
 
     // The older counter request answers late; the mutation result already told
-    // the state the newer truth.
+    // the state the newer truth. The list is asked again because it started
+    // before the confirmed change, even though its answer already agrees.
     script.counts[1].resolve({ unreadCount: 2 });
     script.lists[1].resolve(page([note('a', { read: true }), note('b')]));
+    await flush();
+    expect(script.calls.lists).toHaveLength(3);
+    script.lists[2].resolve(page([note('a', { read: true }), note('b')]));
     await refreshing;
 
     const snapshot = controller.getSnapshot();
     expect(snapshot.state.unreadCount).toBe(1);
     expect(snapshot.state.byId.a?.read).toBe(true);
+  });
+
+  it('does not let a first page requested before a confirmed read restore the old row', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+    controller.start();
+    script.lists[0].resolve(page([note('a')]));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    const refreshing = controller.actions.refresh();
+    const marking = controller.actions.setRead('a', true);
+
+    script.reads[0].resolve({ notification: { ...note('a'), read: true }, unreadCount: 0 });
+    await marking;
+
+    // The list request started before the mutation and answers last with the
+    // server state as it was before the read. It must not undo the confirmed
+    // row; the controller asks for a fresh first page instead.
+    script.lists[1].resolve(page([note('a')]));
+    script.counts[1].resolve({ unreadCount: 1 });
+    await flush();
+
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.state.listStatus).toBe('loading');
+    expect(snapshot.state.byId.a?.read).toBe(true);
+    expect(snapshot.state.unreadCount).toBe(0);
+    expect(script.calls.lists).toHaveLength(3);
+
+    script.lists[2].resolve(page([note('a', { read: true })]));
+    await refreshing;
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.listStatus).toBe('ready');
+    expect(snapshot.state.byId.a?.read).toBe(true);
+    expect(snapshot.state.unreadCount).toBe(0);
+    expect(script.calls.reads).toHaveLength(1);
+  });
+
+  it('settles unknown operations when retry recovers both failed loads', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({ adapter: script.adapter, clock: clockAt(NOW) });
+    controller.start();
+    script.lists[0].resolve(page([note('a'), note('b')]));
+    script.counts[0].resolve({ unreadCount: 2 });
+    await flush();
+
+    const marking = controller.actions.setRead('a', true);
+    script.reads[0].reject(new Error('The connection dropped mid-flight'));
+    await flush();
+
+    // The automatic reconciliation fails on both halves, so the row stays
+    // unknown and the actions stay blocked until the visitor retries.
+    script.lists[1].reject(new InboxError({ code: 'ADAPTER_FAILURE', message: 'Still down' }));
+    script.counts[1].reject(new InboxError({ code: 'ADAPTER_FAILURE', message: 'Still down' }));
+    await marking;
+
+    let snapshot = controller.getSnapshot();
+    expect(snapshot.view.list.items[0]?.unknown).toBe(true);
+    expect(snapshot.view.actions.busy).toBe(true);
+    expect(snapshot.state.pending.readOrder).toEqual(['a']);
+
+    const retrying = controller.actions.retry();
+    expect(script.calls.lists).toHaveLength(3);
+    expect(script.calls.counts).toHaveLength(3);
+
+    script.lists[2].resolve(page([note('a', { read: true }), note('b')]));
+    script.counts[2].resolve({ unreadCount: 1 });
+    await retrying;
+
+    snapshot = controller.getSnapshot();
+    expect(snapshot.state.pending.readOrder).toEqual([]);
+    expect(snapshot.view.list.items[0]?.unknown).toBe(false);
+    expect(snapshot.view.list.items[0]?.read).toBe(true);
+    expect(snapshot.view.actions.busy).toBe(false);
+    expect(snapshot.state.unreadCount).toBe(1);
+    // Reconciliation reads the server; it never repeats the lost mutation.
+    expect(script.calls.reads).toHaveLength(1);
   });
 
   it('abandons the mutation and the queue when the context changes', async () => {
