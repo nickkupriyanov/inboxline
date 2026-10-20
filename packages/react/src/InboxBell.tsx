@@ -12,12 +12,12 @@
  * panel; the provider keeps its lifecycle and its subscription.
  */
 import { useEffect, useId, useRef, useState } from 'react';
-import type { CSSProperties, JSX } from 'react';
+import type { CSSProperties, ComponentPropsWithRef, JSX } from 'react';
 import { createPortal } from 'react-dom';
-import { IL_CLASS } from '@nickkupriyanov/inboxline-core';
 import { observeAvailableArea, restoreFocus } from '@nickkupriyanov/inboxline-core/dom';
 import type { AvailableArea } from '@nickkupriyanov/inboxline-core/dom';
-import { useInboxFlow, useInboxUI } from './context';
+import { useClassNames, useInboxComponents, useInboxFlow, useInboxUI } from './context';
+import type { SlotProps } from './parts';
 import { InboxSurface } from './components/InboxSurface';
 import { BellIcon } from './components/icons';
 import { placeInboxPanel } from './components/panelPlacement';
@@ -27,6 +27,8 @@ import type { InboxPanelPlacement } from './components/panelPlacement';
 export function InboxBell(): JSX.Element {
   const { snapshot, actions } = useInboxFlow();
   const ui = useInboxUI();
+  const cls = useClassNames();
+  const { Trigger } = useInboxComponents();
   const view = snapshot.view;
   const open = ui.open;
   const { setOpen } = ui;
@@ -130,6 +132,17 @@ export function InboxBell(): JSX.Element {
   const triggerLabel = `${ui.messages.listLabel}. ${counterLabel}`;
   const badgeCount = view.counter.unreadCount;
 
+  const triggerProps: SlotProps<ComponentPropsWithRef<'button'>> = {
+    type: 'button',
+    ref: triggerRef,
+    className: cls('trigger'),
+    'aria-label': triggerLabel,
+    'aria-haspopup': 'dialog',
+    'aria-expanded': open,
+    'aria-controls': open ? panelId : undefined,
+    onClick: handleTrigger,
+  };
+
   const panelStyle: CSSProperties | null =
     placement === null
       ? null
@@ -142,24 +155,15 @@ export function InboxBell(): JSX.Element {
         };
 
   return (
-    <div className={IL_CLASS.bell} data-il-theme={ui.theme}>
-      <button
-        type="button"
-        ref={triggerRef}
-        className={IL_CLASS.trigger}
-        aria-label={triggerLabel}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? panelId : undefined}
-        onClick={handleTrigger}
-      >
+    <div className={cls('bell', ui.className)} data-il-theme={ui.theme}>
+      <Trigger open={open} unreadCount={badgeCount} label={triggerLabel} slotProps={triggerProps}>
         <BellIcon />
         {badgeCount !== null && badgeCount > 0 ? (
-          <span className={IL_CLASS.badge} aria-hidden="true">
+          <span className={cls('badge')} aria-hidden="true">
             {badgeCount}
           </span>
         ) : null}
-      </button>
+      </Trigger>
 
       {open && mounted && panelStyle !== null
         ? createPortal(

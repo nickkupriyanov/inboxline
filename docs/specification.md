@@ -20,14 +20,14 @@ work; this file owns the descriptions.
 
 ## 1. Packages and entry points
 
-| Entry point                                  | State                                                    | Content                                                                                                                                                                                                                                                                              |
-| -------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 9) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model, the deterministic mock adapter and the controller lifecycle, filters, paging, mutations and external invalidations. |
-| `@nickkupriyanov/inboxline-core/dom`         | Browser helpers (Iteration 10)                           | Focus around a non-modal panel, element size observation and the viewport-constrained area around an anchor; no React, no import-time browser access.                                                                                                                                |
-| `@nickkupriyanov/inboxline-core/styles.css`  | Stylesheet (Iterations 11 and 15)                        | Plain CSS: `--il-*` design tokens for both themes, a scoped base layer, the feed root, rows, states, the bell trigger, badge and portalled panel. Built into `dist/inboxline.css`.                                                                                                   |
-| `@nickkupriyanov/inboxline-react`            | Provider, hooks and both layouts (Iteration 15)          | `InboxProvider`, `useInboxFlow()`, `useInboxUI()`, `<Inbox />` with the default bell popover and `layout="feed"`, the provider props and the flow/UI types.                                                                                                                          |
-| `@nickkupriyanov/inboxline-react/styles.css` | Copy of the core stylesheet (Iteration 11)               | Byte copy of `dist/inboxline.css`, made by the React post-build step.                                                                                                                                                                                                                |
-| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                                                                          |
+| Entry point                                  | State                                                    | Content                                                                                                                                                                                                                                                                                         |
+| -------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 9) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots and `cx()`, the derived view model, the deterministic mock adapter and the controller lifecycle, filters, paging, mutations and external invalidations. |
+| `@nickkupriyanov/inboxline-core/dom`         | Browser helpers (Iteration 10)                           | Focus around a non-modal panel, element size observation and the viewport-constrained area around an anchor; no React, no import-time browser access.                                                                                                                                           |
+| `@nickkupriyanov/inboxline-core/styles.css`  | Stylesheet (Iterations 11 and 15)                        | Plain CSS: `--il-*` design tokens for both themes, a scoped base layer, the feed root, rows, states, the bell trigger, badge and portalled panel. Built into `dist/inboxline.css`.                                                                                                              |
+| `@nickkupriyanov/inboxline-react`            | Provider, hooks, layouts and parts (Iteration 16)        | `InboxProvider`, `useInboxFlow()`, `useInboxUI()`, `<Inbox />` with the default bell popover and `layout="feed"`, the default parts and their types, and the provider props plus flow/UI types.                                                                                                 |
+| `@nickkupriyanov/inboxline-react/styles.css` | Copy of the core stylesheet (Iteration 11)               | Byte copy of `dist/inboxline.css`, made by the React post-build step.                                                                                                                                                                                                                           |
+| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                                                                                     |
 
 The core publishes values from `./adapter`, `./classNames`, `./config`,
 `./context`, `./controller`, `./derive`, `./errors`, `./i18n`, `./mock`,
@@ -155,10 +155,10 @@ stylesheet and shows both themes, the feed and popover widths, the 320 px
 container, the row states and the list states. It is a review tool, not a
 published package. Browser regression automation remains Iteration 22.
 
-Trigger, panel, filters, counter and replaceable parts are deliberately absent
-from the slots and the stylesheet until their components exist in Iterations
-13–16. Internal helper classes (`.il-group-list`, `.il-loading-row`) are not
-slots and are not a public extension point.
+Trigger, panel, filters, counter and every replaceable part now have their
+components and slots. Internal helper classes (`.il-group-list`,
+`.il-loading-row`) are not slots and are not a public extension point; the
+stable surface is `IlClassSlot` plus the tokens.
 
 ## 2. Controller and snapshot
 
@@ -597,7 +597,11 @@ stylesheet reacts to is written as a `data-il-*` attribute (`data-il-unread`,
 `data-il-pending`, `data-il-unknown`, `data-il-error`, `data-il-kind`,
 `data-il-status`, `data-il-empty`, `data-il-side`) rather than as modifier
 classes; the trigger, badge, panel and close slots arrived with the bell in
-Iteration 15.
+Iteration 15. `cx(...values: ClassValue[])` joins the truthy class names in the
+order given — stable slot class first, the consumer's `classNames` override
+second, any state class last. It does no de-duplication or CSS-module lookup, so
+the resulting string is stable in a snapshot and a consumer can rely on the
+order. The React binding uses it for every slot.
 
 ## 3. Data model and adapter
 
@@ -942,24 +946,32 @@ const { unreadCount } = assertInboxUnreadCount(await counterResponse.json());
 
 ## 4. React binding
 
-**Implemented in Iterations 12–14** (`packages/react/src/`). The package publishes
-four runtime exports and the types below; the bell arrives in Iteration 15 and
-uses the same surface.
+**Implemented in Iterations 12–16** (`packages/react/src/`). The package publishes
+the runtime exports and types below. Iteration 15 added the bell; Iteration 16
+added the provider-level parts map, class overrides and the default-part exports.
+Parts keep the same contract for the bell and the feed because both render one
+`InboxSurface`.
 
-| Export          | Purpose                                                                                          |
-| --------------- | ------------------------------------------------------------------------------------------------ |
-| `InboxProvider` | Owns one core controller, starts and stops it, and supplies the flow and UI contexts.            |
-| `Inbox`         | The ready-made feed: header, filters, rows, read actions, “Mark all as read”, paging and states. |
-| `useInboxFlow`  | The headless flow: `{ snapshot, actions }` from the nearest provider.                            |
-| `useInboxUI`    | Presentation values, copy and controlled UI state: theme, locale, filter, open and setters.      |
+| Export                                              | Purpose                                                                                                         |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `InboxProvider`                                     | Owns one core controller, starts and stops it, supplies the flow and UI contexts, parts and class overrides.    |
+| `Inbox`                                             | The ready-made bell (`<Inbox />`) or feed (`layout="feed"`): header, filters, rows, actions, paging and states. |
+| `useInboxFlow`                                      | The headless flow: `{ snapshot, actions }` from the nearest provider.                                           |
+| `useInboxUI`                                        | Presentation values, copy and controlled UI state: theme, locale, filter, open, parts and setters.              |
+| `DEFAULT_INBOX_COMPONENTS`                          | The complete parts map the widget uses when the application replaces nothing.                                   |
+| `DefaultTrigger`, `DefaultHeader`, `DefaultFilters` | Default parts, so an application can wrap one instead of re-implementing it.                                    |
+| `DefaultNotificationItem`, `DefaultAvatar`          | Default row and leading tile, usable inside a wrapper.                                                          |
+| `DefaultLoading`, `DefaultEmpty`, `DefaultError`, … | Default loading, empty, first-page error and next-page error blocks.                                            |
 
-The provider props are `adapter`, `context`, `config`, `clock`, `theme`, the
-controlled pairs `filter`/`defaultFilter`/`onFilterChange` and
-`open`/`defaultOpen`/`onOpenChange`, `onNotificationClick`, `markReadOnOpen`
-(default `true`), `onError` and `children`. `InboxFlow<TData, TContextData>` and
-`InboxUI<TData>` are public types; `InboxUI` exposes the resolved `markReadOnOpen`
-so a custom row makes the same decision as the ready-made one. The domain types
-are re-exported from the core so a consumer needs one import.
+The provider props are `adapter`, `context`, `config`, `clock`, `theme`,
+`className`, `classNames`, `components`, the controlled pairs
+`filter`/`defaultFilter`/`onFilterChange` and `open`/`defaultOpen`/`onOpenChange`,
+`onNotificationClick`, `markReadOnOpen` (default `true`), `onError` and
+`children`. `InboxFlow<TData, TContextData>` and `InboxUI<TData>` are public
+types; `InboxUI` exposes the resolved `markReadOnOpen`, `className`, `classNames`
+and `components`, so a custom view makes the same decisions as the ready-made
+one. The domain types are re-exported from the core so a consumer needs one
+import.
 
 ### The ready-made feed
 
@@ -1023,9 +1035,9 @@ a second controller: every date, counter, group and availability flag comes from
   its own. Read actions always go through `actions.setRead` and
   `actions.markAllRead`, so a custom UI and the ready-made feed share one queue.
 
-The feed already uses the class slots (`actions`, `markAllRead`, `status`,
-`itemActivate`, `itemAction`) that the replaceable parts will receive in
-Iteration 16.
+The feed is rendered through the replaceable parts described below: its root,
+header, filters, rows, avatar and state blocks are the defaults, not hard-coded
+markup. A replacement and the class slots use the same prepared props.
 
 ### The bell and its panel
 
@@ -1088,6 +1100,77 @@ Known boundaries of this iteration:
   zoom, `visualViewport` and an on-screen keyboard are not compensated.
 - A very short viewport lets the card itself scroll; the nested list keeps its
   token cap inside it.
+
+### Replaceable parts and class overrides
+
+**Implemented in Iteration 16** (`packages/react/src/parts.tsx`,
+`packages/react/src/components/`). A part is a function component that receives
+the data it renders and the actions it triggers; the controller, read queue,
+focus hand-off, dialog placement and list structure stay with the library.
+
+`components` is a provider prop, not an `Inbox` prop. The bell and the feed share
+one surface, so one override applies to both and the two cannot drift apart. The
+map is `InboxComponents<TData>`:
+
+| Part               | Receives                                                                                         | Default draws                               |
+| ------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| `Trigger`          | `open`, `unreadCount`, `label`, prepared `slotProps`, default glyph/badge `children`             | Bell button with badge                      |
+| `Header`           | `title`, `headingId`, `slotProps`, `headingProps`, prepared `filters` and `close`                | Header, heading, filters and close action   |
+| `Filters`          | `label`, `options[]` (`value`, `label`, `selected`, prepared `props`), `slotProps`               | Group with two native filter buttons        |
+| `NotificationItem` | `item`, `messages`, `activatable`, `slotProps`, `activateProps`, `readProps`, `avatar`, `status` | Row with activation and read/unread buttons |
+| `Avatar`           | `item`, `kind` (`avatar`/`icon`/`none`), `slotProps`                                             | Image or initials, icon, or nothing         |
+| `Loading`          | `label`, `slotProps`                                                                             | Three skeleton rows and a status label      |
+| `Empty`            | `label`, `slotProps`                                                                             | Filter-specific empty text                  |
+| `Error`            | `message`, `retryLabel`, `onRetry`, `slotProps`                                                  | First-page alert with retry                 |
+| `PageError`        | same as `Error`                                                                                  | Next-page alert with retry                  |
+
+Every `SlotProps` bundle carries the stable `il-*` class with the consumer's
+`classNames` override already merged, the library's `data-il-*` state, the
+`role`/`aria-*` contract where applicable, and the handler or `ref` the library
+needs back. Button parts also receive their own prepared bundle:
+
+- `TriggerPartProps.slotProps` carries the accessible name, `aria-haspopup`,
+  `aria-expanded`, `aria-controls`, the click and the trigger ref.
+- `HeaderPartProps.headingProps` must be spread on the heading: the dialog's
+  `aria-labelledby` points at its id. `filters` and `close` are already rendered
+  through their own parts.
+- `FilterOption.props` carries the click that asks the provider for the filter,
+  `aria-pressed` and the ref used when focus falls back to the active filter.
+- `NotificationItemPartProps.activateProps` and `readProps` carry their clicks,
+  `aria-busy`, the read action's accessible name (`Mark as read: {title}` /
+  `Mark as unread: {title}`), the disabled mirror and the refs used for focus.
+  They are siblings and must not be nested; `avatar` and `status` are rendered
+  nodes that a replacement may place anywhere or drop.
+
+`className` is a whole-widget class added to `.il-root` in the feed and to both
+`.il-bell` and the portalled `.il-root` in the bell, so a theme declared by that
+class reaches the trigger and the panel alike. `classNames` is a
+`Partial<Record<IlClassSlot, string>>`: each value is appended after the stable
+slot class and before any state class. Omitted slots keep only their base class.
+Neither prop replaces the library's classes.
+
+`TData` flows through `InboxComponents<TData>`,
+`NotificationItemPartProps<TData>`, `AvatarPartProps<TData>` and `useInboxUI()`;
+a custom row reads `item.data` without casting. When the application changes
+`components`, `className` or `classNames` on a mounted provider, the controller is
+not recreated and the list is not reloaded: only the presentation context
+changes. Replacing a part does not disable the standard actions, and an exception
+in an application callback remains contained.
+
+The default parts are exported (`DefaultTrigger`, `DefaultHeader`,
+`DefaultFilters`, `DefaultNotificationItem`, `DefaultAvatar`, `DefaultLoading`,
+`DefaultEmpty`, `DefaultError`, `DefaultPageError`) together with
+`DEFAULT_INBOX_COMPONENTS`, so a consumer can wrap the default rather than copy
+it. The part props types are public and documented with JSDoc.
+
+Known boundaries: a replacement owns its markup, so it must spread the prepared
+props to keep focus, aria and the read flow; the library cannot detect a dropped
+`slotProps`. `className` is applied to the bell wrapper and the portalled panel as
+two elements, not to a common ancestor, so descendant selectors that expect one
+wrapper do not apply. Per-slot overrides describe the ready-made structure; a
+fully custom row uses its own classes inside `slotProps`. The three playground
+examples are rendered in the real browser during review; jsdom tests cover the
+prepared props, class merge, `TData`, state blocks and controller preservation.
 
 ### Lifecycle
 
@@ -1157,9 +1240,13 @@ section renders the default `<Inbox />` bell, the standalone
 shared controller is visible in the same snapshot and one open panel does not
 disturb the feed. The second pair of providers shows a different context with
 controlled filter and open values, and a button simulates an external event
-through `addNotification()` + `invalidate()`. It imports the published stylesheet
-path through a source alias. It is started with `pnpm dev` and built with
-`pnpm build:playground`; it is not a published package.
+through `addNotification()` + `invalidate()`. Three further sections are the
+Iteration 16 examples: a typed row and avatar reading `TData`, an alternative
+header with custom filter pills, and a lilac CSS theme declared through
+`className`/`classNames` over the published tokens. The theme example shows both
+the bell (trigger and portalled panel) and the feed under one provider. It imports
+the published stylesheet path through a source alias. It is started with
+`pnpm dev` and built with `pnpm build:playground`; it is not a published package.
 
 ## 5. Visual language
 

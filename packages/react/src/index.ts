@@ -3,11 +3,11 @@
  *
  * The provider owns one core controller and exposes it through
  * `useSyncExternalStore`; the hooks below are the whole headless surface. The
- * ready-made bell and feed layouts arrive in the following iterations and use
- * exactly these values, so a custom UI is never a second-class consumer.
+ * ready-made bell and feed layouts use exactly these values, so a custom UI is
+ * never a second-class consumer.
  *
  * ```tsx
- * import { InboxProvider, useInboxFlow, useInboxUI } from '@nickkupriyanov/inboxline-react';
+ * import { InboxProvider, Inbox, useInboxFlow, useInboxUI } from '@nickkupriyanov/inboxline-react';
  * ```
  *
  * The stylesheet is published next to this entry as
@@ -18,5 +18,32 @@ export { Inbox } from './Inbox';
 export type { InboxProps } from './Inbox';
 export { InboxProvider } from './provider';
 export { useInboxFlow, useInboxUI } from './context';
-export type { InboxFlow, InboxProviderProps, InboxTheme, InboxUI } from './types';
+export {
+  DEFAULT_INBOX_COMPONENTS,
+  DefaultAvatar,
+  DefaultEmpty,
+  DefaultError,
+  DefaultFilters,
+  DefaultHeader,
+  DefaultLoading,
+  DefaultNotificationItem,
+  DefaultPageError,
+  DefaultTrigger,
+} from './parts';
+export type {
+  AvatarPartProps,
+  EmptyPartProps,
+  ErrorPartProps,
+  FilterOption,
+  FiltersPartProps,
+  HeaderPartProps,
+  InboxComponents,
+  LoadingPartProps,
+  NotificationItemPartProps,
+  PageErrorPartProps,
+  PartComponent,
+  SlotProps,
+  TriggerPartProps,
+} from './parts';
+export type { InboxClassNames, InboxFlow, InboxProviderProps, InboxTheme, InboxUI } from './types';
 export type * from '@nickkupriyanov/inboxline-core';

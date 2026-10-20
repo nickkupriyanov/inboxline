@@ -22,6 +22,7 @@ const EXPECTED_EXPORTS: readonly string[] = [
   'assertInboxMarkAllReadResult',
   // stable class names
   'IL_CLASS',
+  'cx',
   // configuration
   'FALLBACK_LOCALE',
   'FALLBACK_TIME_ZONE',

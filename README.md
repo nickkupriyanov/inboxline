@@ -12,14 +12,19 @@ Inboxline belongs to the same family as
 an explicit light theme, pink accent `#ff215a`, CSS variables instead of a
 styling framework, and a framework-free core behind a thin binding.
 
-> **Status: Iteration 15 — the bell and its panel.** The framework-free core is
-> implemented: the adapter contract, reducer, derived view, deterministic mock
-> adapter, controller and DOM helpers. The stylesheet ships as
-> `@nickkupriyanov/inboxline-core/styles.css` with a copy on the React entry and
-> is documented in [`docs/visual-reference.md`](./docs/visual-reference.md).
+> **Status: Iteration 16 — replaceable parts and theming.** The framework-free
+> core is implemented: the adapter contract, reducer, derived view, deterministic
+> mock adapter, controller, `cx()` class helper and DOM helpers. The stylesheet
+> ships as `@nickkupriyanov/inboxline-core/styles.css` with a copy on the React
+> entry and is documented in
+> [`docs/visual-reference.md`](./docs/visual-reference.md).
 > `@nickkupriyanov/inboxline-react` publishes `InboxProvider`, the ready-made
 > `<Inbox />` bell popover by default, `<Inbox layout="feed" />` for the standalone
-> feed, `useInboxFlow()` and `useInboxUI()`. The plan lives in
+> feed, `useInboxFlow()` and `useInboxUI()`. The provider also accepts
+> `components`, `classNames` and `className`; the default parts
+> (`DefaultTrigger`, `DefaultHeader`, `DefaultFilters`, `DefaultNotificationItem`,
+> `DefaultAvatar` and the state blocks) and `DEFAULT_INBOX_COMPONENTS` are exported
+> so an application can wrap rather than re-implement them. The plan lives in
 > [`roadmap.md`](./roadmap.md); the implemented contract is recorded in
 > [`docs/specification.md`](./docs/specification.md).
 
@@ -28,7 +33,7 @@ styling framework, and a framework-free core behind a thin binding.
 | Package                           | Purpose                                                                   |
 | --------------------------------- | ------------------------------------------------------------------------- |
 | `@nickkupriyanov/inboxline-core`  | State, adapter contract, reducer, derived view model, errors, copy, time. |
-| `@nickkupriyanov/inboxline-react` | React provider, hooks, bell popover and feed layouts.                     |
+| `@nickkupriyanov/inboxline-react` | React provider, hooks, bell/feed layouts, replaceable parts and theming.  |
 
 The core has no React, no DOM access at import time and no third-party runtime
 dependencies.

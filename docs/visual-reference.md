@@ -214,6 +214,26 @@ not need a visual rule: the loading, empty and error blocks are rendered as thei
 own slots. They remain available to a consumer that wants to style the list by
 status.
 
+### Consumer overrides
+
+The stable slots are the styling extension point; a consumer never has to rely on
+nesting.
+
+- `className` on the provider is a whole-widget class. In the feed it lands on
+  `.il-root`; in the bell it lands on both `.il-bell` and the portalled `.il-root`,
+  because the panel is outside the trigger wrapper. A theme declared on that class
+  therefore reaches the trigger and the panel.
+- `classNames` is a map from `IlClassSlot` to an extra class. The DOM order is the
+  stable `il-*` class first, the consumer's override second and any state class
+  last, so `.il-item app-item` is the expected shape. Overrides never replace the
+  base class and an omitted slot keeps only its base.
+- Tokens stay on `.il-root` and `.il-bell`. Overriding `--il-accent`,
+  `--il-radius-*` or a surface token under the provider class retunes both
+  compositions; no selector needs to reach into internal markup.
+- The playground's lilac example uses `--il-accent`, the accent-soft trio, the
+  focus ring and the three radii, plus per-slot `header`/`item` hooks. It keeps the
+  dark and light themes intact because it does not replace the palette wholesale.
+
 Focus is one rule for the whole widget: a 2 px ring with a 2 px offset. The ring
 is never removed without a replacement, and no rule uses `:focus` to hide it.
 `prefers-reduced-motion` collapses every animation and transition to 1 ms in
@@ -278,9 +298,9 @@ is new; the visual language is not.
 ## 6. Limits of this iteration
 
 - The stylesheet covers every slot that exists in `IL_CLASS`, including the bell,
-  trigger, badge, panel and close action. Replaceable parts and their layout
-  attributes arrive with their components in Iteration 16; no empty placeholder
-  class is published ahead of them.
+  trigger, badge, panel, close action and all replaceable parts. Custom parts use
+  their own classes; the published slots and tokens remain the contract. No empty
+  placeholder class is published ahead of its component.
 - The static stand shows the feed and the popover surface with hand-written
   markup. The live trigger, the portal and the viewport placement are exercised
   by the playground and the React tests; jsdom cannot measure their real geometry.

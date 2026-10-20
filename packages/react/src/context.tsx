@@ -7,7 +7,11 @@
  * headless consumer re-render on data without receiving a new presentation
  * object, and the built-in parts read both.
  */
-import { createContext, useContext } from 'react';
+import { createContext, useCallback, useContext, useMemo } from 'react';
+import { IL_CLASS, cx } from '@nickkupriyanov/inboxline-core';
+import type { ClassValue, IlClassSlot } from '@nickkupriyanov/inboxline-core';
+import { DEFAULT_INBOX_COMPONENTS } from './parts';
+import type { InboxComponents } from './parts';
 import type { InboxFlow, InboxUI } from './types';
 
 /** Internal: `null` until a provider supplies the flow. */
@@ -55,4 +59,38 @@ export function useInboxUI<TData = unknown>(): InboxUI<TData> {
     throw new Error('[inboxline] useInboxUI() must be used inside <InboxProvider>.');
   }
   return ui as InboxUI<TData>;
+}
+
+/**
+ * The parts the widget renders, with the defaults filled in.
+ *
+ * Internal to the built-in components: a replacement is per part and independent
+ * of `classNames`, so a custom part keeps the library's classes unless it
+ * chooses otherwise.
+ *
+ * @typeParam TData — Application data carried by every notification.
+ */
+export function useInboxComponents<TData = unknown>(): Required<InboxComponents<TData>> {
+  const { components } = useInboxUI<TData>();
+  return useMemo(
+    () => ({ ...DEFAULT_INBOX_COMPONENTS, ...components }) as Required<InboxComponents<TData>>,
+    [components],
+  );
+}
+
+/**
+ * Builds one element's class list: the stable slot class, the consumer's
+ * per-slot override and any state class, in that order.
+ *
+ * ```tsx
+ * const cls = useClassNames();
+ * <span className={cls('itemTitle')} />
+ * ```
+ */
+export function useClassNames(): (slot: IlClassSlot, ...extra: ClassValue[]) => string {
+  const { classNames } = useInboxUI();
+  return useCallback(
+    (slot: IlClassSlot, ...extra: ClassValue[]) => cx(IL_CLASS[slot], classNames?.[slot], ...extra),
+    [classNames],
+  );
 }

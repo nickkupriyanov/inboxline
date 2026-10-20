@@ -180,6 +180,98 @@ h3 {
   align-items: center;
 }
 
+/* Custom row, header and filters used by the customisation sections. They only
+   add hooks around the library's prepared props; no layout is re-implemented. */
+.pg-project-tag {
+  display: block;
+  margin-top: 2px;
+  color: var(--il-text-subtle);
+  font-size: 12px;
+}
+
+.pg-project-badge {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: var(--il-accent-ink);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.pg-project-header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.pg-project-eyebrow {
+  margin: 0 0 2px;
+  color: var(--il-accent-ink);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.pg-project-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pg-project-filters {
+  display: flex;
+  gap: 6px;
+}
+
+.pg-project-filter {
+  padding: 5px 10px;
+  border-radius: var(--il-radius-pill);
+  font-size: 12px;
+}
+
+/* A theme declared entirely by overriding the published custom properties. The
+   class is on `.il-bell` and the portalled `.il-root`, so both change together. */
+.il-root.pg-theme-lilac,
+.il-bell.pg-theme-lilac {
+  --il-accent: #a78bfa;
+  --il-accent-hover: #bca7fb;
+  --il-accent-press: #8b5cf6;
+  --il-accent-ink: #c4b5fd;
+  --il-accent-soft: rgba(167, 139, 250, 0.16);
+  --il-accent-soft-strong: rgba(167, 139, 250, 0.28);
+  --il-accent-glow: rgba(167, 139, 250, 0.45);
+  --il-focus-ring: rgba(167, 139, 250, 0.9);
+  --il-radius-card: 14px;
+  --il-radius-panel: 14px;
+  --il-radius-control: 10px;
+}
+
+/* The light page needs a darker lilac: the dark-theme value is too light for
+   text and for a 3:1 focus ring on white surfaces. */
+.pg-page-light .il-root.pg-theme-lilac,
+.pg-page-light .il-bell.pg-theme-lilac {
+  --il-accent: #7c3aed;
+  --il-accent-hover: #6d28d9;
+  --il-accent-press: #5b21b6;
+  --il-accent-ink: #6d28d9;
+  --il-accent-soft: rgba(124, 58, 237, 0.12);
+  --il-accent-soft-strong: rgba(124, 58, 237, 0.22);
+  --il-accent-glow: rgba(124, 58, 237, 0.35);
+  --il-focus-ring: rgba(124, 58, 237, 0.9);
+}
+
+/* Per-slot hooks added next to the stable `il-*` classes through `classNames`. */
+.pg-theme-header {
+  border-bottom: 1px solid var(--il-border-strong);
+}
+
+.pg-theme-item[data-il-unread='true'] {
+  box-shadow: inset 3px 0 0 var(--il-accent);
+}
+
 @media (max-width: 520px) {
   .pg-page {
     padding: 24px 12px 56px;

@@ -26,8 +26,34 @@
  * `data-il-layout`, `data-il-theme` and `data-il-filter` describe the widget as a
  * whole. The feed sets all three in Iteration 13; the bell trigger carries the
  * theme and the portalled panel carries layout, theme and filter in Iteration 15.
+ *
+ * `cx` is the one place class names are joined. The binding uses it to put the
+ * stable slot class first, the consumer's `classNames` override second and any
+ * state class last, so a consumer can rely on that order instead of guessing.
  */
 import type { IlClassSlot } from './types';
+
+/** A class name, or a falsy value that contributes nothing. */
+export type ClassValue = string | false | null | undefined;
+
+/**
+ * Joins the truthy class names in order.
+ *
+ * ```ts
+ * cx('il-item', undefined, 'my-row'); // 'il-item my-row'
+ * ```
+ *
+ * The helper is deliberately tiny: no de-duplication, no conditional objects and
+ * no CSS-module lookup, so the resulting string is predictable in a snapshot.
+ */
+export function cx(...values: ClassValue[]): string {
+  let result = '';
+  for (const value of values) {
+    if (!value) continue;
+    result = result ? `${result} ${value}` : value;
+  }
+  return result;
+}
 
 /** Base class for every customisable slot. BEM-ish, but flat and non-invasive. */
 export const IL_CLASS: Record<IlClassSlot, string> = {

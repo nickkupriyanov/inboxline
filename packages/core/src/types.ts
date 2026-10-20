@@ -333,9 +333,9 @@ export interface InboxMessages {
  * A slot is an extension point, not a DOM structure: the base class from
  * `IL_CLASS` marks the part, and the `classNames` prop adds the consumer's own
  * class alongside it rather than instead of it. The set stays aligned with the
- * parts the derived view actually describes — the feed and its filters arrive in
- * Iteration 13, the bell and its panel in Iteration 15, and replaceable parts
- * follow their components in Iteration 16.
+ * parts the derived view actually describes — the feed and its filters arrived in
+ * Iteration 13, the bell and its panel in Iteration 15, and the replaceable parts
+ * in Iteration 16.
  */
 export type IlClassSlot =
   | 'root'

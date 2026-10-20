@@ -1,10 +1,15 @@
 /**
  * The ready-made playground.
  *
- * Iteration 15 shows both compositions under one provider: the default bell with
- * its portalled popover panel and the standalone feed. The counter card beside
- * them stays headless to show that all three read one controller. Separate
- * providers still stay isolated.
+ * The first sections show both compositions under one provider: the default
+ * bell with its portalled popover panel and the standalone feed. The counter
+ * card beside them stays headless to show that all three read one controller.
+ * Separate providers still stay isolated.
+ *
+ * The last three sections are the Iteration 16 customisation examples: a typed
+ * custom row, an alternative header with custom filters, and a CSS theme applied
+ * through `className`/`classNames`. None of them re-implements the controller or
+ * the read queue.
  */
 import { useState } from 'react';
 import {
@@ -13,7 +18,16 @@ import {
   type InboxContext,
   type InboxNotification,
 } from '@nickkupriyanov/inboxline-core';
-import { Inbox, InboxProvider, useInboxFlow, useInboxUI } from '@nickkupriyanov/inboxline-react';
+import {
+  Inbox,
+  InboxProvider,
+  useInboxFlow,
+  useInboxUI,
+  type AvatarPartProps,
+  type FiltersPartProps,
+  type HeaderPartProps,
+  type NotificationItemPartProps,
+} from '@nickkupriyanov/inboxline-react';
 
 /* -------------------------------------------------------------------------- */
 /*  Fixtures                                                                   */
@@ -112,6 +126,184 @@ function CounterCard({ title }: { title: string }) {
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Customisation examples                                                     */
+/* -------------------------------------------------------------------------- */
+
+interface ProjectData {
+  project: string;
+  badge: string;
+}
+
+const PROJECT_CONTEXT: InboxContext = { key: 'projects' };
+
+function projectNotification(
+  id: string,
+  title: string,
+  body: string,
+  minutes: number,
+  read: boolean,
+  project: string,
+  badge: string,
+): InboxNotification<ProjectData> {
+  return {
+    id,
+    title,
+    body,
+    createdAt: minutesAgo(minutes),
+    read,
+    author: { name: 'Inboxline demo' },
+    data: { project, badge },
+  };
+}
+
+const projectAdapter = createMockAdapter<ProjectData>({
+  clock: systemInboxClock(),
+  pageSize: 4,
+  latencyMs: 180,
+  contexts: [
+    {
+      context: PROJECT_CONTEXT,
+      notifications: [
+        projectNotification(
+          'p5',
+          'New comment on «Release notes»',
+          'Mira left a note on the draft.',
+          2,
+          false,
+          'Apollo',
+          'AP',
+        ),
+        projectNotification(
+          'p4',
+          'Payment received',
+          'Invoice #2041 is settled.',
+          12,
+          false,
+          'Borealis',
+          'BO',
+        ),
+        projectNotification(
+          'p3',
+          'Deployment finished',
+          'production · 2 minutes',
+          48,
+          true,
+          'Apollo',
+          'AP',
+        ),
+        projectNotification(
+          'p2',
+          'Weekly report is ready',
+          'Every project has a summary.',
+          26 * 60,
+          true,
+          'Cassiopeia',
+          'CA',
+        ),
+        projectNotification(
+          'p1',
+          'Workspace created',
+          'The project space is ready for invites.',
+          72 * 60,
+          true,
+          'Borealis',
+          'BO',
+        ),
+      ],
+    },
+  ],
+});
+
+/** Joins the library's prepared class with the demo's own without dropping either. */
+function joinClasses(...values: readonly (string | undefined)[]): string {
+  return values.filter((value): value is string => value !== undefined && value !== '').join(' ');
+}
+
+/**
+ * A row that reads the application's `TData`. Everything behavioural — the
+ * activation click, the read request, pending/unknown status and the refs used
+ * for focus — still comes from the prepared props.
+ */
+function ProjectRow({
+  item,
+  activatable,
+  slotProps,
+  activateProps,
+  readProps,
+  avatar,
+  status,
+}: NotificationItemPartProps<ProjectData>) {
+  const content = (
+    <>
+      <span className="il-item-title">{item.title}</span>
+      {item.body === null ? null : <span className="il-item-body">{item.body}</span>}
+      <span className="pg-project-tag">
+        {item.data?.project ?? 'No project'} · {item.timeLabel}
+      </span>
+    </>
+  );
+
+  return (
+    <li {...slotProps}>
+      {avatar}
+      <div className="il-item-content">
+        {activatable ? <button {...activateProps}>{content}</button> : content}
+        {status}
+      </div>
+      <button {...readProps}>
+        <span aria-hidden="true">{item.read ? '↺' : '✓'}</span>
+      </button>
+      <span className="il-item-unread-marker" aria-hidden="true" />
+    </li>
+  );
+}
+
+/** A tile that draws the project badge from `TData` instead of initials. */
+function ProjectAvatar({ item, kind, slotProps }: AvatarPartProps<ProjectData>) {
+  if (kind === 'none') return null;
+  return (
+    <span {...slotProps}>
+      <span className="pg-project-badge" aria-hidden="true">
+        {item.data?.badge ?? '•'}
+      </span>
+    </span>
+  );
+}
+
+/** A header with its own layout; the heading id still names the dialog. */
+function ProjectHeader({ title, headingProps, slotProps, filters, close }: HeaderPartProps) {
+  return (
+    <header {...slotProps} className={joinClasses(slotProps.className, 'pg-project-header')}>
+      <div>
+        <p className="pg-project-eyebrow">Projects</p>
+        <h2 {...headingProps}>{title}</h2>
+      </div>
+      <div className="pg-project-controls">
+        {filters}
+        {close}
+      </div>
+    </header>
+  );
+}
+
+/** Custom filter pills; each button still spends its prepared props. */
+function ProjectFilters({ options, slotProps }: FiltersPartProps) {
+  return (
+    <div {...slotProps} className={joinClasses(slotProps.className, 'pg-project-filters')}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          {...option.props}
+          className={joinClasses(option.props.className, 'pg-project-filter')}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /*  Page                                                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -127,13 +319,13 @@ export function App() {
     <main className={`pg-page pg-page-${theme}`}>
       <header className="pg-header">
         <div>
-          <p className="pg-eyebrow">Iteration 15 · bell, panel and feed</p>
+          <p className="pg-eyebrow">Iteration 16 · replaceable parts and theming</p>
           <h1>Inboxline layouts</h1>
           <p className="pg-lead">
             The bell opens a non-modal panel placed against its trigger, portalled out of the page
             and capped by the viewport. It shares the feed&apos;s rows, filters and actions, and
             closing it leaves the provider running. The feed remains available as a standalone
-            layout.
+            layout, and both can be restyled or partially replaced without touching the controller.
           </p>
         </div>
         <button
@@ -199,6 +391,68 @@ export function App() {
             Add an event to workspace B
           </button>
         </div>
+      </section>
+
+      <section className="pg-section">
+        <h2>Custom row with typed data</h2>
+        <p className="pg-meta">
+          <code>components.NotificationItem</code> receives <code>TData</code> together with the
+          prepared activation, read action, avatar and status nodes. The demo reads{' '}
+          <code>item.data.project</code> and draws its own badge; marking read, the unread filter
+          and the focus hand-off still run through the library.
+        </p>
+        <InboxProvider<ProjectData>
+          adapter={projectAdapter}
+          context={PROJECT_CONTEXT}
+          theme={theme}
+          components={{ NotificationItem: ProjectRow, Avatar: ProjectAvatar }}
+          onNotificationClick={(clicked) => setOpened(clicked.title)}
+        >
+          <Inbox layout="feed" />
+        </InboxProvider>
+      </section>
+
+      <section className="pg-section">
+        <h2>Alternative header and filters</h2>
+        <p className="pg-meta">
+          The header owns its layout but places the prepared <code>headingProps</code>, so the
+          dialog keeps its accessible name. The custom filter buttons spread{' '}
+          <code>option.props</code>: the selection still belongs to the provider.
+        </p>
+        <InboxProvider<ProjectData>
+          adapter={projectAdapter}
+          context={PROJECT_CONTEXT}
+          theme={theme}
+          components={{ Header: ProjectHeader, Filters: ProjectFilters }}
+          onNotificationClick={(clicked) => setOpened(clicked.title)}
+        >
+          <Inbox layout="feed" />
+        </InboxProvider>
+      </section>
+
+      <section className="pg-section">
+        <h2>CSS theme through classes</h2>
+        <p className="pg-meta">
+          <code>className</code> lands on the bell trigger and the portalled panel, while{' '}
+          <code>classNames</code> adds per-slot hooks next to the stable <code>il-*</code> classes.
+          The lilac accent and tighter geometry below are plain CSS custom properties, not a second
+          styling system.
+        </p>
+        <InboxProvider<ProjectData>
+          adapter={projectAdapter}
+          context={PROJECT_CONTEXT}
+          theme={theme}
+          className="pg-theme-lilac"
+          classNames={{
+            root: 'pg-theme-surface',
+            header: 'pg-theme-header',
+            item: 'pg-theme-item',
+          }}
+          onNotificationClick={(clicked) => setOpened(clicked.title)}
+        >
+          <Inbox />
+          <Inbox layout="feed" />
+        </InboxProvider>
       </section>
     </main>
   );

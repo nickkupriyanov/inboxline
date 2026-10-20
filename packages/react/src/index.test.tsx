@@ -8,6 +8,16 @@ import * as react from './index';
  * ask whether it belongs in the surface at all.
  */
 const EXPECTED_EXPORTS: readonly string[] = [
+  'DEFAULT_INBOX_COMPONENTS',
+  'DefaultAvatar',
+  'DefaultEmpty',
+  'DefaultError',
+  'DefaultFilters',
+  'DefaultHeader',
+  'DefaultLoading',
+  'DefaultNotificationItem',
+  'DefaultPageError',
+  'DefaultTrigger',
   'Inbox',
   'InboxProvider',
   'useInboxFlow',

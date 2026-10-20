@@ -8,6 +8,7 @@
  */
 import type { ReactNode } from 'react';
 import type {
+  IlClassSlot,
   InboxActions,
   InboxAdapter,
   InboxClock,
@@ -19,6 +20,7 @@ import type {
   InboxNotification,
   InboxSnapshot,
 } from '@nickkupriyanov/inboxline-core';
+import type { InboxComponents } from './parts';
 
 export type * from '@nickkupriyanov/inboxline-core';
 
@@ -34,6 +36,14 @@ export type * from '@nickkupriyanov/inboxline-core';
  * hydration therefore agree.
  */
 export type InboxTheme = 'dark' | 'light';
+
+/**
+ * Per-slot class overrides, added alongside the library's own classes.
+ *
+ * The keys are the stable `IlClassSlot` names from the core; an omitted slot
+ * keeps only its base class. `className` is the simpler whole-widget override.
+ */
+export type InboxClassNames = Partial<Record<IlClassSlot, string>>;
 
 /* -------------------------------------------------------------------------- */
 /*  Provider props                                                             */
@@ -69,6 +79,25 @@ export interface InboxProviderProps<TData = unknown, TContextData = unknown> {
   clock?: InboxClock;
   /** Colour theme of every part under the provider. Default: `'dark'`. */
   theme?: InboxTheme;
+
+  /**
+   * Extra class on the outermost element of every composition.
+   *
+   * The bell's panel is portalled out of the trigger wrapper, so the class is
+   * applied to both `.il-bell` and the panel's `.il-root`: a CSS theme declared
+   * by that class reaches the trigger and the panel alike. In the feed it lands
+   * on `.il-root`.
+   */
+  className?: string;
+  /** Per-slot class overrides, added alongside the library's own classes. */
+  classNames?: InboxClassNames;
+  /**
+   * Replace individual parts of every composition under this provider; anything
+   * absent keeps its default. The parts are provider-level on purpose: the bell
+   * and the feed share one surface, so one override applies to both and two
+   * widgets under one provider cannot drift apart.
+   */
+  components?: InboxComponents<TData>;
 
   /**
    * Controlled list filter. Fixes the filter's mode when the provider is
@@ -140,6 +169,12 @@ export interface InboxUI<TData = unknown> {
   locale: string;
   /** The resolved copy, including the application's overrides. */
   messages: InboxMessages;
+  /** Extra class applied to the outer root of each composition. */
+  className?: string | undefined;
+  /** Per-slot class overrides, added alongside the library's classes. */
+  classNames?: InboxClassNames | undefined;
+  /** Parts the application replaced; anything absent falls back to the default. */
+  components?: InboxComponents<TData> | undefined;
   /** The filter the loaded rows belong to. */
   filter: InboxFilter;
   /** Asks for another filter; in controlled mode this only calls `onFilterChange`. */
