@@ -21,6 +21,10 @@ export default defineConfig({
         replacement: source('../../packages/react/src/index.ts'),
       },
       {
+        find: '@nickkupriyanov/inboxline-core/dom',
+        replacement: source('../../packages/core/src/dom/index.ts'),
+      },
+      {
         find: '@nickkupriyanov/inboxline-core',
         replacement: source('../../packages/core/src/index.ts'),
       },

@@ -7,11 +7,16 @@
 .il-root,
 .il-root *,
 .il-root *::before,
-.il-root *::after {
+.il-root *::after,
+.il-bell,
+.il-bell *,
+.il-bell *::before,
+.il-bell *::after {
   box-sizing: border-box;
 }
 
-.il-root {
+.il-root,
+.il-bell {
   font-family: var(--il-font-family);
   font-size: var(--il-font-size);
   line-height: 1.45;
@@ -29,18 +34,21 @@
  * silently won over the component layer's tokens. `:where()` keeps the reset at
  * the bottom of the cascade, where a reset belongs.
  */
-:where(.il-root) :where(button, input, select, textarea) {
+:where(.il-root) :where(button, input, select, textarea),
+:where(.il-bell) :where(button, input, select, textarea) {
   font: inherit;
   color: inherit;
 }
 
 /* Focus -------------------------------------------------------------------- */
 
-.il-root :focus {
+.il-root :focus,
+.il-bell :focus {
   outline: none;
 }
 
-.il-root :focus-visible {
+.il-root :focus-visible,
+.il-bell :focus-visible {
   outline: 2px solid var(--il-focus-ring);
   outline-offset: 2px;
   border-radius: var(--il-radius-control);
@@ -81,7 +89,10 @@
 @media (prefers-reduced-motion: reduce) {
   .il-root *,
   .il-root *::before,
-  .il-root *::after {
+  .il-root *::after,
+  .il-bell *,
+  .il-bell *::before,
+  .il-bell *::after {
     animation-duration: 1ms !important;
     animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;

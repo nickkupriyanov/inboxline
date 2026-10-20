@@ -16,6 +16,7 @@ import type { InboxLocale, InboxMessages, InboxPluralMessage } from './types';
 
 const en: InboxMessages = {
   listLabel: 'Notifications',
+  closeLabel: 'Close notifications',
   countLabel: {
     one: '{count} unread notification',
     other: '{count} unread notifications',
@@ -52,6 +53,7 @@ const en: InboxMessages = {
 
 const ru: InboxMessages = {
   listLabel: 'Уведомления',
+  closeLabel: 'Закрыть уведомления',
   countLabel: {
     one: '{count} непрочитанное',
     few: '{count} непрочитанных',

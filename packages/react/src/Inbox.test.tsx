@@ -41,7 +41,7 @@ function renderFeed(
       config={{ locale: 'en', timeZone: 'UTC' }}
       {...providerProps}
     >
-      <Inbox />
+      <Inbox layout="feed" />
     </InboxProvider>,
   );
   return { adapter, ...view };
@@ -230,7 +230,7 @@ describe('Inbox filters and paging', () => {
     adapter.failNext('getNotifications');
     render(
       <InboxProvider adapter={adapter} context={CONTEXT_A} clock={testClock}>
-        <Inbox />
+        <Inbox layout="feed" />
       </InboxProvider>,
     );
 
@@ -472,7 +472,7 @@ describe('Inbox copy', () => {
         clock={testClock}
         config={{ locale: 'ru', timeZone: 'UTC' }}
       >
-        <Inbox />
+        <Inbox layout="feed" />
       </InboxProvider>,
     );
 

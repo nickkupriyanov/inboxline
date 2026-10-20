@@ -444,6 +444,20 @@ describe('contrast', () => {
     expect(failures).toEqual([]);
   });
 
+  it('keeps the badge count readable on the accent fill in both themes', () => {
+    const failures: string[] = [];
+    for (const theme of themes()) {
+      const ratio = contrast(
+        colour(theme.tokens, '--il-badge-ink'),
+        colour(theme.tokens, '--il-accent'),
+      );
+      if (ratio < 4.5) {
+        failures.push(`${theme.name} badge count: ${ratio.toFixed(2)}:1 (needs 4.5:1)`);
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
   it('keeps the unread marker distinguishable from its surface', () => {
     const failures: string[] = [];
     for (const theme of themes()) {

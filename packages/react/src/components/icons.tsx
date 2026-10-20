@@ -66,3 +66,22 @@ export function UnreadDotIcon(): JSX.Element {
     </svg>
   );
 }
+
+/** The close action of the bell panel. */
+export function CloseIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="m6 6 12 12M18 6 6 18" />
+    </svg>
+  );
+}

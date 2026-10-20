@@ -5,21 +5,18 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 12 — the React provider and the headless API.** The
-> notification, context, filter, page, adapter and error types are implemented in
-> `@nickkupriyanov/inboxline-core` (`packages/core/src/`), next to the RFC 3339
-> timestamp and calendar-day helpers, the boundary checks an adapter wraps its
-> payloads in, the pure reducer with its initial state, the resolved
-> configuration with its `en`/`ru` copy and plural rules, the stable class slots,
-> the pure `deriveInboxView()` with its snapshot memo, `createMockAdapter()` with
-> its simulator controls, `createInboxController()` with its lifecycle,
-> first-page, counter, filter, paging, mutation and external-update behaviour,
-> the separate browser entry point `@nickkupriyanov/inboxline-core/dom` with its
-> focus, size and available-area helpers, and the authored stylesheet published
-> as `@nickkupriyanov/inboxline-core/styles.css` with a copy on the React entry.
-> `@nickkupriyanov/inboxline-react` now publishes `InboxProvider`,
-> `useInboxFlow()` and `useInboxUI()`; the ready-made feed and bell layouts are
-> still **Planned**.
+> **Current status: Iteration 15 — the bell and its panel.** The framework-free
+> core is implemented: the notification, context, filter, page, adapter and error
+> types; the RFC 3339 and calendar-day helpers; the boundary checks; the reducer;
+> the resolved configuration with `en`/`ru` copy; the class slots; the derived
+> view; the deterministic mock adapter; the controller with lifecycle, first page,
+> counter, filters, paging, mutations and external updates; the browser entry
+> point `@nickkupriyanov/inboxline-core/dom`; and the stylesheet published as
+> `@nickkupriyanov/inboxline-core/styles.css` with a copy on the React entry.
+> `@nickkupriyanov/inboxline-react` publishes `InboxProvider`, `useInboxFlow()`
+> and `useInboxUI()`, and the ready-made `<Inbox />` now renders the default bell
+> popover or, with `layout="feed"`, the standalone feed. Replaceable parts remain
+> **Planned** for Iteration 16.
 
 ## 1. Packages and entry points
 
@@ -27,8 +24,8 @@ work; this file owns the descriptions.
 | -------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 9) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots, the derived view model, the deterministic mock adapter and the controller lifecycle, filters, paging, mutations and external invalidations. |
 | `@nickkupriyanov/inboxline-core/dom`         | Browser helpers (Iteration 10)                           | Focus around a non-modal panel, element size observation and the viewport-constrained area around an anchor; no React, no import-time browser access.                                                                                                                                |
-| `@nickkupriyanov/inboxline-core/styles.css`  | Stylesheet (Iteration 11)                                | Plain CSS: `--il-*` design tokens for both themes, a scoped base layer, the feed root, rows and list states. Built into `dist/inboxline.css`.                                                                                                                                        |
-| `@nickkupriyanov/inboxline-react`            | Provider and headless hooks (Iteration 12)               | `InboxProvider`, `useInboxFlow()`, `useInboxUI()`, the provider props and the flow/UI types. The ready-made feed, including its actions, arrived in Iterations 13–14.                                                                                                                |
+| `@nickkupriyanov/inboxline-core/styles.css`  | Stylesheet (Iterations 11 and 15)                        | Plain CSS: `--il-*` design tokens for both themes, a scoped base layer, the feed root, rows, states, the bell trigger, badge and portalled panel. Built into `dist/inboxline.css`.                                                                                                   |
+| `@nickkupriyanov/inboxline-react`            | Provider, hooks and both layouts (Iteration 15)          | `InboxProvider`, `useInboxFlow()`, `useInboxUI()`, `<Inbox />` with the default bell popover and `layout="feed"`, the provider props and the flow/UI types.                                                                                                                          |
 | `@nickkupriyanov/inboxline-react/styles.css` | Copy of the core stylesheet (Iteration 11)               | Byte copy of `dist/inboxline.css`, made by the React post-build step.                                                                                                                                                                                                                |
 | `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                                                                          |
 
@@ -598,8 +595,9 @@ markup; `selectPlural()` chooses the form with `Intl.PluralRules`.
 Stable classes are listed by `IL_CLASS` and keyed by `IlClassSlot`. State a
 stylesheet reacts to is written as a `data-il-*` attribute (`data-il-unread`,
 `data-il-pending`, `data-il-unknown`, `data-il-error`, `data-il-kind`,
-`data-il-status`, `data-il-empty`) rather than as modifier classes; trigger,
-panel and counter slots arrive with their components in later iterations.
+`data-il-status`, `data-il-empty`, `data-il-side`) rather than as modifier
+classes; the trigger, badge, panel and close slots arrived with the bell in
+Iteration 15.
 
 ## 3. Data model and adapter
 
@@ -965,9 +963,9 @@ are re-exported from the core so a consumer needs one import.
 
 ### The ready-made feed
 
-`<Inbox />` renders one `layout="feed"` composition from the nearest provider. It
-is a consumer of the same public hooks a custom UI uses, not a second controller:
-every date, counter, group and availability flag comes from
+`<Inbox layout="feed" />` renders one `layout="feed"` composition from the
+nearest provider. It is a consumer of the same public hooks a custom UI uses, not
+a second controller: every date, counter, group and availability flag comes from
 `snapshot.view`, and every request goes through `actions` or the controlled
 `setFilter`.
 
@@ -1019,15 +1017,77 @@ every date, counter, group and availability flag comes from
 - The counter is announced through the hidden polite live region; row and bulk
   statuses use their own `role="status"` / `role="alert"`, so the whole list is
   not read again after a change. The feed does not duplicate the global counter in
-  its header; the bell trigger owns the badge in Iteration 15.
+  its header; the bell trigger owns the badge.
 - Filters, paging and updates work in both controlled and uncontrolled modes
   because they call `useInboxUI().setFilter`; the feed never decides the filter on
   its own. Read actions always go through `actions.setRead` and
   `actions.markAllRead`, so a custom UI and the ready-made feed share one queue.
 
-The bell panel belongs to Iteration 15 and replaceable parts to Iteration 16; the
-feed already uses the class slots (`actions`, `markAllRead`, `status`,
-`itemActivate`, `itemAction`) that those parts will receive.
+The feed already uses the class slots (`actions`, `markAllRead`, `status`,
+`itemActivate`, `itemAction`) that the replaceable parts will receive in
+Iteration 16.
+
+### The bell and its panel
+
+`<Inbox />` is the bell composition and the default layout. It renders one native
+trigger and, while open, the same notification surface in a non-modal dialog
+portalled to `document.body`. `layout="feed"` chooses the standalone feed above.
+The two layouts can live under one provider: the badge, the list and every action
+read the same snapshot and the same controller.
+
+- **Trigger.** A native `type="button"` with a bell glyph, `aria-haspopup="dialog"`,
+  `aria-expanded`, and `aria-controls` pointing at the mounted panel. Its accessible
+  name is the list label followed by the server counter label — for example
+  “Notifications. 3 unread notifications” — or the unknown-counter text while the
+  server has not answered. The visible badge repeats the number and is
+  `aria-hidden`, so the counter is announced once. A zero or unknown counter renders
+  no badge rather than a misleading `0`.
+- **Dialog.** The panel is the root card with `role="dialog"`, labelled by its
+  heading, and deliberately **not** `aria-modal`: the page behind it stays
+  reachable and there is no focus trap. The heading, filters, rows, bulk action,
+  updates banner and error states are the shared surface, so the bell cannot drift
+  from the feed.
+- **Open state.** The panel follows `useInboxUI().open` and calls `setOpen()`, so
+  the provider's controlled/uncontrolled rules apply unchanged. Closing only hides
+  the panel; it never calls `stop()` and never removes the provider's subscription.
+  Reopening the panel calls `actions.refresh()`: the first page and the counter are
+  verified against the server, exactly as an explicit refresh would.
+- **Placement.** The panel uses `position: fixed`. The available area comes from
+  `measureAvailableArea()` / `observeAvailableArea()` in
+  `@nickkupriyanov/inboxline-core/dom`, so a scroll of any ancestor, a window
+  resize or an anchor resize re-places it. The panel is right-aligned to the
+  trigger, shifted left only when the viewport margin requires it, and its width
+  is `min(400px, viewport − 2 × 8px)`: on a 320 px screen it is 304 px wide, not a
+  source of horizontal scroll. The side with more free space wins; the panel is
+  expressed with `top` below the trigger or `bottom` above it, and `max-height` is
+  capped to the free space minus an 8 px gap. `data-il-side` exposes the chosen
+  side to CSS and tests.
+- **Focus.** Opening from the trigger moves focus to the dialog, whose heading is
+  announced. The panel does not trap Tab. Escape closes it and returns focus to
+  the trigger; the close button does the same. A pointer outside closes it without
+  moving focus, so the element the visitor clicked keeps it. An `open` value
+  changed by the application does not move focus on its own.
+- **Theme and tokens.** The trigger lives in `.il-bell`, which is a token scope like
+  `.il-root`; the portalled panel keeps `.il-root` and the same `data-il-theme`, so
+  the portal cannot lose the palette. The close action is a native button with the
+  localized `closeLabel`.
+- **SSR.** The portal is created only after mounting, so a server render and its
+  first client render agree; the full SSR contract, including a server-open panel
+  and stable IDs, remains Iteration 19. The minute ticker that would keep relative
+  labels fresh is not scheduled yet: the application still calls
+  `actions.refreshTime()` itself.
+
+Known boundaries of this iteration:
+
+- The provider owns exactly one `open` value, so two bells in one provider open
+  together. Two independent bells need two providers, while any number of feeds
+  can share either.
+- Without a viewport measurement (a server, a DOM without layout) the panel is not
+  rendered; the trigger remains a valid collapsed control.
+- The panel does not lock page scroll, and the layout viewport is used: browser
+  zoom, `visualViewport` and an on-screen keyboard are not compensated.
+- A very short viewport lets the card itself scroll; the nested list keeps its
+  token cap inside it.
 
 ### Lifecycle
 
@@ -1051,9 +1111,10 @@ feed already uses the class slots (`actions`, `markAllRead`, `status`,
 controller.getSnapshot)` is the only subscription. Both hooks under one
   provider receive the same snapshot object; two providers own two controllers
   even when they receive the same adapter.
-- The binding does not schedule `refreshTime()` itself yet. Relative labels are
-  refreshed when the application calls the action; a minute ticker is part of the
-  ready-made layouts.
+- The binding still does not schedule `refreshTime()` itself. Relative labels are
+  refreshed when the application calls the action; a minute ticker belongs with
+  the remaining ready-made-layout work and is listed as a limitation of
+  Iteration 15.
 
 ### Controlled and uncontrolled UI values
 
@@ -1091,12 +1152,13 @@ bells need two providers; the feed can share either provider and its counter.
 ### Playground
 
 `apps/playground/` is a Vite application over the package sources. Its first
-section renders the ready-made `<Inbox />` next to a headless counter card under
-one provider, so the shared controller is visible in the same snapshot. The
-second pair of providers shows a different context with controlled filter and
-open values, and a button simulates an external event through
-`addNotification()` + `invalidate()`. It imports the published stylesheet path
-through a source alias. It is started with `pnpm dev` and built with
+section renders the default `<Inbox />` bell, the standalone
+`<Inbox layout="feed" />` and a headless counter card under one provider, so the
+shared controller is visible in the same snapshot and one open panel does not
+disturb the feed. The second pair of providers shows a different context with
+controlled filter and open values, and a button simulates an external event
+through `addNotification()` + `invalidate()`. It imports the published stylesheet
+path through a source alias. It is started with `pnpm dev` and built with
 `pnpm build:playground`; it is not a published package.
 
 ## 5. Visual language
@@ -1300,4 +1362,14 @@ while a lost answer stays `unknown` and is reconciled. The bulk button uses
 `aria-disabled` with a guarded handler so focus survives a busy queue. In the
 unread filter, the used control's focus moves to the next row, then the previous
 one, and finally to the active filter; it is not stolen if focus moved elsewhere.
-The bell panel remains Iteration 15 and replaceable parts Iteration 16.
+Resolved in Iteration 15: `<Inbox />` is the bell popover by default and
+`<Inbox layout="feed" />` is the standalone list. Both are the same surface over
+one controller. The trigger's accessible name joins `listLabel` with the server
+counter label and the badge is `aria-hidden`; an unknown counter is never shown as
+zero. The panel is a non-modal dialog portalled to the document body, placed with
+the measured available area, capped to the viewport and re-placed on scroll,
+resize and anchor-size changes. Opening from the trigger focuses the dialog;
+Escape and the close button return focus to the trigger, while an outside pointer
+closes without stealing focus. Reopening calls `refresh()`, and closing never
+stops the provider. One provider still owns one `open` value, so two independent
+bells need two providers.

@@ -368,11 +368,103 @@
         </div>
       </section>
 
+      <section class="stand-section" aria-labelledby="bell-title">
+        <h2 class="stand-section-title" id="bell-title">Bell trigger</h2>
+        <p class="stand-section-note">
+          44 px round trigger with the shared counter badge: collapsed, expanded and light. The
+          portalled panel is positioned by the binding, so this static page shows the trigger scope
+          only.
+        </p>
+
+        <div class="stand-row">
+          <div class="stand-column">
+            <p class="stand-label">Dark, collapsed</p>
+            <div class="il-bell" data-il-theme="dark">
+              <button
+                type="button"
+                class="il-trigger"
+                aria-label="Notifications. 3 unread notifications"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M18 9a6 6 0 1 0-12 0c0 4.2-1.4 5.5-2 6.5h16c-.6-1-2-2.3-2-6.5Z" />
+                  <path d="M10 19a2.2 2.2 0 0 0 4 0" />
+                </svg>
+                <span class="il-badge" aria-hidden="true">3</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="stand-column">
+            <p class="stand-label">Dark, expanded</p>
+            <div class="il-bell" data-il-theme="dark">
+              <button
+                type="button"
+                class="il-trigger"
+                aria-label="Notifications. 27 unread notifications"
+                aria-haspopup="dialog"
+                aria-expanded="true"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M18 9a6 6 0 1 0-12 0c0 4.2-1.4 5.5-2 6.5h16c-.6-1-2-2.3-2-6.5Z" />
+                  <path d="M10 19a2.2 2.2 0 0 0 4 0" />
+                </svg>
+                <span class="il-badge" aria-hidden="true">27</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="stand-column">
+            <p class="stand-label">Light</p>
+            <div class="il-bell" data-il-theme="light">
+              <button
+                type="button"
+                class="il-trigger"
+                aria-label="Notifications. 3 unread notifications"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M18 9a6 6 0 1 0-12 0c0 4.2-1.4 5.5-2 6.5h16c-.6-1-2-2.3-2-6.5Z" />
+                  <path d="M10 19a2.2 2.2 0 0 0 4 0" />
+                </svg>
+                <span class="il-badge" aria-hidden="true">3</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="stand-section" aria-labelledby="popover-title">
         <h2 class="stand-section-title" id="popover-title">Popover at 400 px</h2>
         <p class="stand-section-note">
-          The list scrolls inside the panel; the header stays put. Trigger and panel chrome arrive
-          in Iteration 15.
+          The list scrolls inside the panel; the header stays put. The live portal and its
+          placement are shown by the playground; this page shows the surface and its states.
         </p>
 
         <div class="stand-row">

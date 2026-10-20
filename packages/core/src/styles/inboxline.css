@@ -7,10 +7,11 @@
    row can be unread, pending and focused at the same time without a modifier
    class per combination.
 
-   Trigger, panel, counter and their state attributes are not here yet: they
-   arrive with their components in Iterations 15 to 16. The root only reads
-   `data-il-layout` and `data-il-theme`, which describe the widget as a whole and
-   are already part of the public naming.
+   Trigger, panel, badge and their state attributes are part of the same layer:
+   the bell trigger lives in the `.il-bell` token scope, and the portalled panel
+   is an `.il-root[data-il-layout='popover']` card. The root reads
+   `data-il-layout`, `data-il-theme`, `data-il-filter` and `data-il-side`, which
+   describe the widget as a whole and are part of the public naming.
    ========================================================================== */
 
 /* Root --------------------------------------------------------------------- */
@@ -48,10 +49,130 @@
 .il-root[data-il-layout='popover'] {
   --il-width-current: var(--il-width-panel);
   box-shadow: var(--il-shadow-panel);
+  /* The binding caps the height at the space the chosen side leaves free. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .il-root[data-il-layout='feed'] {
   --il-width-current: var(--il-width-feed);
+}
+
+/* Bell, trigger and badge --------------------------------------------------- */
+
+/*
+ * The bell is its own token scope, because the trigger lives outside the panel
+ * root. The panel itself is portalled to the document body and keeps the same
+ * `data-il-theme`, so both parts read one palette.
+ */
+.il-bell {
+  position: relative;
+  display: inline-flex;
+  vertical-align: top;
+}
+
+.il-trigger {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: var(--il-text-muted);
+  background: var(--il-surface-raised);
+  border: 1px solid var(--il-border);
+  border-radius: var(--il-radius-pill);
+  cursor: pointer;
+  transition:
+    color var(--il-duration-fast) var(--il-ease-standard),
+    background var(--il-duration-fast) var(--il-ease-standard),
+    border-color var(--il-duration-fast) var(--il-ease-standard),
+    transform var(--il-duration-fast) var(--il-ease-soft);
+}
+
+.il-trigger:hover {
+  color: var(--il-text);
+  background: var(--il-control-hover);
+}
+
+.il-trigger:active {
+  transform: scale(0.96);
+}
+
+.il-trigger[aria-expanded='true'] {
+  color: var(--il-accent-ink);
+  background: var(--il-accent-soft);
+  border-color: var(--il-accent-soft-strong);
+}
+
+.il-trigger > svg {
+  width: 20px;
+  height: 20px;
+}
+
+/*
+ * The badge repeats the global server counter. It is `aria-hidden`, because the
+ * trigger's accessible name already contains the same plural label; a screen
+ * reader hears the sentence once, not the badge a second time.
+ */
+.il-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--il-badge-ink);
+  background: var(--il-accent);
+  border-radius: var(--il-radius-pill);
+  box-shadow: 0 0 0 2px var(--il-surface);
+  pointer-events: none;
+}
+
+/*
+ * The panel is the same root card, portalled. `position`, offsets, width and
+ * the height cap are inline because they depend on the anchor at this moment;
+ * the stylesheet owns only the stacking order.
+ */
+.il-panel {
+  z-index: 50;
+}
+
+.il-panel:focus {
+  outline: none;
+}
+
+.il-panel-close {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--il-text-subtle);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--il-radius-pill);
+  cursor: pointer;
+  transition:
+    color var(--il-duration-fast) var(--il-ease-standard),
+    background var(--il-duration-fast) var(--il-ease-standard);
+}
+
+.il-panel-close:hover {
+  color: var(--il-text);
+  background: var(--il-control-hover);
+}
+
+.il-panel-close > svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Header ------------------------------------------------------------------- */

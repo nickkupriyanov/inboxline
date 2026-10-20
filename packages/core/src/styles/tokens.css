@@ -2,21 +2,23 @@
    Design tokens.
 
    Dark is the default theme. Everything is a plain custom property on
-   `.il-root`, so an application can retheme the inbox by overriding a handful of
-   variables — no Tailwind, no CSS-in-JS, no build step:
+   `.il-root`, and the bell trigger uses the same set on `.il-bell`, so an
+   application can retheme the inbox by overriding a handful of variables — no
+   Tailwind, no CSS-in-JS, no build step:
 
      .il-root { --il-accent: #ff215a; --il-surface: #101018; }
 
    The light theme is the same set under `[data-il-theme='light']`, which the
-   binding puts on the root from the resolved theme. There is no
-   `prefers-color-scheme` rule on purpose: a theme chosen by the explicit
+   binding puts on the root or on the bell wrapper from the resolved theme. There
+   is no `prefers-color-scheme` rule on purpose: a theme chosen by the explicit
    attribute is never switched by the operating system.
 
    The values are adapted from Slotline and Soundline; the mapping and the
    measured deviations are listed in `docs/visual-reference.md`.
    ========================================================================== */
 
-.il-root {
+.il-root,
+.il-bell {
   /* Shape ------------------------------------------------------------------ */
   --il-radius-card: 28px;
   --il-radius-panel: 22px;
@@ -110,6 +112,11 @@
   --il-accent-hover: #ff4271;
   --il-accent-press: #e30f49;
   --il-accent-contrast: #ffffff;
+  /*
+   * The count badge is 10.5 px text, so white on the pink fill measures only
+   * 3.74:1. The dark ink measures 4.83:1 and keeps the accent pill.
+   */
+  --il-badge-ink: #16161a;
   --il-accent-ink: #ff6b90;
   --il-accent-soft: rgba(255, 33, 90, 0.16);
   --il-accent-soft-strong: rgba(255, 33, 90, 0.28);
@@ -148,7 +155,8 @@
 
 /* Palette: light ----------------------------------------------------------- */
 
-.il-root[data-il-theme='light'] {
+.il-root[data-il-theme='light'],
+.il-bell[data-il-theme='light'] {
   color-scheme: light;
 
   --il-surface: #f4f4f5;
@@ -183,6 +191,7 @@
   --il-accent-hover: #f5114e;
   --il-accent-press: #d80c43;
   --il-accent-contrast: #ffffff;
+  --il-badge-ink: #16161a;
   --il-accent-ink: #c2144a;
   --il-accent-soft: #fee5e6;
   --il-accent-soft-strong: #fbd2d5;

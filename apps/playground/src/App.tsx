@@ -1,11 +1,10 @@
 /**
- * The ready-made feed playground.
+ * The ready-made playground.
  *
- * Iteration 14 shows the complete row flow: activation with
- * `onNotificationClick`, read/unread actions, “Mark all as read” and the
- * pending, refused and reconciling states. The counter card beside it stays
- * headless to show that both read one controller. Separate providers still stay
- * isolated.
+ * Iteration 15 shows both compositions under one provider: the default bell with
+ * its portalled popover panel and the standalone feed. The counter card beside
+ * them stays headless to show that all three read one controller. Separate
+ * providers still stay isolated.
  */
 import { useState } from 'react';
 import {
@@ -128,12 +127,13 @@ export function App() {
     <main className={`pg-page pg-page-${theme}`}>
       <header className="pg-header">
         <div>
-          <p className="pg-eyebrow">Iteration 14 · actions and activation</p>
-          <h1>Inboxline feed</h1>
+          <p className="pg-eyebrow">Iteration 15 · bell, panel and feed</p>
+          <h1>Inboxline layouts</h1>
           <p className="pg-lead">
-            The feed now completes the visitor loop: activate a notification to navigate, mark one
-            row read or unread, or mark the whole context read. Pending, refused and reconciling
-            states stay next to the action instead of taking the list hostage.
+            The bell opens a non-modal panel placed against its trigger, portalled out of the page
+            and capped by the viewport. It shares the feed&apos;s rows, filters and actions, and
+            closing it leaves the provider running. The feed remains available as a standalone
+            layout.
           </p>
         </div>
         <button
@@ -145,11 +145,12 @@ export function App() {
       </header>
 
       <section className="pg-section">
-        <h2>One provider, two views</h2>
+        <h2>One provider, three views</h2>
         <p className="pg-meta">
-          The counter and the feed share one snapshot and one unread counter. Filter and panel
-          values are uncontrolled here (internal to the provider); the feed owns the visible filter
-          buttons. Activating a row marks it read and reports its title below.
+          The bell, the counter card and the feed share one snapshot and one unread counter. The
+          bell opens a portalled panel in the default popover layout; the feed is the same surface
+          with <code>layout=&quot;feed&quot;</code>. Filter and panel values are uncontrolled here
+          (internal to the provider). Activating a row marks it read and reports its title below.
         </p>
         <InboxProvider
           adapter={adapter}
@@ -159,6 +160,7 @@ export function App() {
         >
           <CounterCard title="Bell counter" />
           <Inbox />
+          <Inbox layout="feed" />
         </InboxProvider>
         <p className="pg-meta" aria-live="polite">
           Last activated: <code>{opened ?? 'nothing yet'}</code>

@@ -26,7 +26,7 @@ The authored CSS is split into three files and concatenated, in this order, into
 | ---------------------- | ---------------------------------------------------------------------- |
 | `styles/tokens.css`    | Shape, layout, type, motion, the dark palette and the light overrides. |
 | `styles/base.css`      | Scoped box model, typography, focus, utilities, reduced motion.        |
-| `styles/inboxline.css` | Root surface, header, list, day groups, rows and states.               |
+| `styles/inboxline.css` | Root surface, bell, header, list, day groups, rows and states.         |
 
 `styles/index.css` is the development entry that imports the three files. It is
 not published. The public paths are:
@@ -45,10 +45,12 @@ generator.
 
 ## 2. Tokens
 
-Every token is defined on `.il-root`. The light theme redefines the same palette
-under `[data-il-theme='light']`; there is no `prefers-color-scheme` rule, so an
-explicitly chosen theme is never switched by the operating system. A consumer
-can override a token on its own `.il-root` without touching the package.
+Every token is defined on `.il-root` and, for the bell trigger that sits outside
+the panel root, on `.il-bell`. The light theme redefines the same palette under
+`[data-il-theme='light']` on either scope; there is no `prefers-color-scheme`
+rule, so an explicitly chosen theme is never switched by the operating system. A
+consumer can override a token on its own `.il-root` or `.il-bell` without
+touching the package.
 
 ### Shape and layout
 
@@ -110,6 +112,7 @@ The dark column is the default. The light column is what
 | `--il-accent-hover`         | `#ff4271`                                                                                                            | `#f5114e`                                                                           |
 | `--il-accent-press`         | `#e30f49`                                                                                                            | `#d80c43`                                                                           |
 | `--il-accent-contrast`      | `#ffffff`                                                                                                            | `#ffffff`                                                                           |
+| `--il-badge-ink`            | `#16161a`                                                                                                            | `#16161a`                                                                           |
 | `--il-accent-ink`           | `#ff6b90`                                                                                                            | `#c2144a`                                                                           |
 | `--il-accent-soft`          | `rgba(255, 33, 90, 0.16)`                                                                                            | `#fee5e6`                                                                           |
 | `--il-accent-soft-strong`   | `rgba(255, 33, 90, 0.28)`                                                                                            | `#fbd2d5`                                                                           |
@@ -155,6 +158,11 @@ map between Inboxline and the chapters of the reference stylesheets:
 | `IL_CLASS` slot    | Reference pattern                    | Note                                          |
 | ------------------ | ------------------------------------ | --------------------------------------------- |
 | `root`             | `.sn-root` / `.sl-root`              | Surface, width and container.                 |
+| `bell`             | `.sl-control` (wrapper)              | Trigger scope and token holder.               |
+| `trigger`          | `.sl-icon-button`                    | 44 px round bell with the shared badge.       |
+| `badge`            | `.sl-day-dot` / count pill           | 19 px accent pill, `aria-hidden`.             |
+| `panel`            | `.sl-popover`                        | Portalled root; fixed coordinates are inline. |
+| `panelClose`       | `.sl-icon-button`                    | 30 px close action in the panel header.       |
 | `header`           | `.sl-header`                         | Two-line rhythm is not used yet.              |
 | `heading`          | `.sl-title`                          | 17 px, 650, ellipsis.                         |
 | `filters`          | `.sl-tabs`                           | Segmented pill around two native buttons.     |
@@ -192,6 +200,7 @@ The stylesheet reads these states:
 | `data-il-layout="popover"` | 400 px width, capped list and panel shadow.                           |
 | `data-il-layout="feed"`    | 800 px width; the list grows with its rows.                           |
 | `data-il-filter="…"`       | The applied filter, available to consumer styles.                     |
+| `data-il-side="…"`         | The side of the trigger the portalled panel occupies.                 |
 | `data-il-unread="true"`    | Unread surface, hover surface and visible marker.                     |
 | `data-il-pending="true"`   | `cursor: progress` and a pulsing marker; the text keeps its contrast. |
 | `data-il-unknown="true"`   | Amber inset ring and amber meta text; paired with a textual status.   |
@@ -217,7 +226,12 @@ marked with `aria-disabled` or the root attribute, not by colour alone.
 
 ## 4. Geometry and narrow containers
 
-- The popover is 400 px and the feed 800 px, or 100% of a narrower parent.
+- The popover is 400 px and the feed 800 px, or 100% of a narrower parent. The
+  portalled panel is additionally capped by the viewport: it is
+  `min(400px, viewport − 2 × 8px)`, so a 320 px window shows a 304 px panel and
+  never horizontal scroll.
+- The bell trigger is a 44 px round control with a 19 px accent badge. It sits in
+  the `.il-bell` token scope; the panel keeps the `.il-root` card and its theme.
 - Both work at 320 px: the root caps its width, the grid gives the text column
   all remaining space, long titles and bodies use `overflow-wrap: anywhere`, and
   a container query tightens the insets and the leading tile below 380 px.
@@ -263,10 +277,13 @@ is new; the visual language is not.
 
 ## 6. Limits of this iteration
 
-- The stylesheet covers the feed parts that exist in `IL_CLASS`. Trigger, panel,
-  counter, replaceable parts and their layout attributes arrive with their
-  components in Iterations 15–16; no empty placeholder class is published ahead
-  of them.
+- The stylesheet covers every slot that exists in `IL_CLASS`, including the bell,
+  trigger, badge, panel and close action. Replaceable parts and their layout
+  attributes arrive with their components in Iteration 16; no empty placeholder
+  class is published ahead of them.
+- The static stand shows the feed and the popover surface with hand-written
+  markup. The live trigger, the portal and the viewport placement are exercised
+  by the playground and the React tests; jsdom cannot measure their real geometry.
 - There is no animation layer yet. `il-shimmer` and `il-pulse` are state feedback,
   not the open/close and row-exit choreography of Iteration 17.
   `--il-row-max-height` is reserved for that work.

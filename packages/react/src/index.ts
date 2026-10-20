@@ -15,6 +15,7 @@
  */
 
 export { Inbox } from './Inbox';
+export type { InboxProps } from './Inbox';
 export { InboxProvider } from './provider';
 export { useInboxFlow, useInboxUI } from './context';
 export type { InboxFlow, InboxProviderProps, InboxTheme, InboxUI } from './types';

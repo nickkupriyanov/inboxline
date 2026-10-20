@@ -27,6 +27,16 @@
 export type InboxFilter = 'all' | 'unread';
 
 /**
+ * Which ready-made composition a binding renders.
+ *
+ * `popover` is the compact bell and its panel — the default of the ready-made
+ * widget. `feed` is the standalone list that can share the same provider and the
+ * same server counter. The layout only chooses the composition and the width; it
+ * never changes what the controller loads.
+ */
+export type InboxLayout = 'popover' | 'feed';
+
+/**
  * The person or system a notification came from.
  *
  * Everything except `name` is optional: an adapter that only knows a display
@@ -251,6 +261,8 @@ export interface InboxPluralMessage {
 export interface InboxMessages {
   /** Accessible name of the notification list. */
   listLabel: string;
+  /** Accessible name of the control that closes the bell panel. */
+  closeLabel: string;
   /** Counter text, for example `{count} unread notifications`. */
   countLabel: InboxPluralMessage;
   /** Shown instead of a number while the server has not reported a counter. */
@@ -322,11 +334,16 @@ export interface InboxMessages {
  * `IL_CLASS` marks the part, and the `classNames` prop adds the consumer's own
  * class alongside it rather than instead of it. The set stays aligned with the
  * parts the derived view actually describes — the feed and its filters arrive in
- * Iteration 13, while the trigger, panel and replaceable parts follow their
- * components in Iterations 15 and 16.
+ * Iteration 13, the bell and its panel in Iteration 15, and replaceable parts
+ * follow their components in Iteration 16.
  */
 export type IlClassSlot =
   | 'root'
+  | 'bell'
+  | 'trigger'
+  | 'badge'
+  | 'panel'
+  | 'panelClose'
   | 'header'
   | 'heading'
   | 'filters'

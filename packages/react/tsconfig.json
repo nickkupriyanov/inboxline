@@ -4,7 +4,8 @@
     "types": ["vitest/globals"],
     "paths": {
       "@nickkupriyanov/inboxline-react": ["./src/index.ts"],
-      "@nickkupriyanov/inboxline-core": ["../core/src/index.ts"]
+      "@nickkupriyanov/inboxline-core": ["../core/src/index.ts"],
+      "@nickkupriyanov/inboxline-core/dom": ["../core/src/dom/index.ts"]
     }
   },
   "include": ["src", "*.config.ts"]
