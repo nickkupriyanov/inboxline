@@ -14,7 +14,7 @@
  * focus, handlers and the accessibility contract even after a replacement.
  */
 import { useCallback, useEffect, useId, useRef } from 'react';
-import type { ComponentPropsWithRef, CSSProperties, JSX, ReactNode, Ref } from 'react';
+import type { ComponentPropsWithRef, CSSProperties, FocusEvent, JSX, ReactNode, Ref } from 'react';
 import type { InboxFilter, InboxItemView, InboxLayout } from '@nickkupriyanov/inboxline-core';
 import {
   useAnimations,
@@ -132,6 +132,13 @@ export function InboxSurface({
   const readRefs = useRef(new Map<string, HTMLButtonElement>());
   const filterRefs = useRef(new Map<InboxFilter, HTMLButtonElement>());
   const focusRequestRef = useRef<FocusRequest | null>(null);
+  /**
+   * The last control inside the surface that took focus. If a commit removes it
+   * instead of moving focus first, the browser drops focus on `body`; the effect
+   * below puts it back on the active filter instead of losing the visitor's
+   * place in the page or the dialog.
+   */
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
 
   const bulkActive = view.actions.bulkStatus !== 'idle';
   const showMarkAllRead =
@@ -169,6 +176,27 @@ export function InboxSurface({
 
     filterRefs.current.get('unread')?.focus();
   }, [view.list.items]);
+
+  /**
+   * A completed action can remove the very control that started it — “Mark all
+   * as read”, “Show updates”, a retry, the last “Show more”. The explicit focus
+   * hand-off above covers rows; this covers those controls. It acts only when
+   * focus fell to the document body, so a deliberate move elsewhere is never
+   * stolen.
+   */
+  useEffect(() => {
+    const removed = lastFocusedRef.current;
+    if (removed === null || removed.isConnected) return;
+    lastFocusedRef.current = null;
+
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return;
+    filterRefs.current.get(view.settings.filter)?.focus();
+  });
+
+  function trackFocus(event: FocusEvent<HTMLElement>): void {
+    lastFocusedRef.current = event.target as HTMLElement;
+  }
 
   function requestFocus(item: InboxItemView, control: FocusRequest['control']): void {
     if (view.settings.filter !== 'unread') return;
@@ -383,6 +411,7 @@ export function InboxSurface({
       aria-labelledby={panel ? headingId : undefined}
       aria-hidden={panel && closing ? 'true' : undefined}
       tabIndex={panel && !closing ? -1 : undefined}
+      onFocus={trackFocus}
       style={
         panelExitDurationMs === undefined
           ? style
@@ -572,16 +601,19 @@ export function InboxSurface({
           <button
             type="button"
             className={cls('loadMore')}
-            disabled={!view.page.canLoadMore}
+            aria-disabled={view.page.canLoadMore ? undefined : 'true'}
             aria-busy={view.page.loading ? 'true' : undefined}
-            onClick={() => void actions.loadMore()}
+            onClick={() => {
+              if (!view.page.canLoadMore) return;
+              void actions.loadMore();
+            }}
           >
             {view.page.loading ? <span className="il-spinner" aria-hidden="true" /> : null}
             {view.page.label}
           </button>
         ) : null}
 
-        <p className={cls('live')} aria-live="polite" aria-atomic="true">
+        <p className={cls('live')} role="status" aria-live="polite" aria-atomic="true">
           {view.live.message}
         </p>
       </Height>

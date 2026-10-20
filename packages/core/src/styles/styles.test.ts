@@ -348,6 +348,11 @@ describe('contrast', () => {
     return rgba(value);
   }
 
+  /** The same colour with an alpha channel, for a control faded with `opacity`. */
+  function atOpacity(value: Rgba, alpha: number): string {
+    return `rgba(${value[0]}, ${value[1]}, ${value[2]}, ${alpha})`;
+  }
+
   /** Every opaque surface a row or a caption can land on. */
   function surfaces(tokens: Map<string, string>): Array<{ where: string; colour: Rgba }> {
     return [
@@ -506,6 +511,44 @@ describe('contrast', () => {
       }
     }
     expect(failures).toEqual([]);
+  });
+
+  it('keeps the faded read/unread control glyph above 3:1 on every row surface', () => {
+    const rule = /\.il-item-action\s*\{([^}]*)\}/.exec(inboxlineCss)?.[1];
+    expect(rule, '.il-item-action rule is missing').toBeTruthy();
+
+    const opacity = Number(/opacity:\s*([0-9.]+);/.exec(rule as string)?.[1]);
+    expect(Number.isFinite(opacity), 'the glyph opacity is missing').toBe(true);
+    // The visual state is a faded control, not a hidden one: WCAG 1.4.11 asks
+    // for 3:1 for the icon that carries the read/unread action.
+    expect(opacity).toBeGreaterThan(0);
+    expect(opacity).toBeLessThanOrEqual(1);
+
+    const failures: string[] = [];
+    for (const theme of themes()) {
+      for (const surface of surfaces(theme.tokens)) {
+        const glyph = over(
+          atOpacity(colour(theme.tokens, '--il-text-subtle'), opacity),
+          theme.tokens.get(surface.where) as string,
+        );
+        const ratio = contrast(glyph, surface.colour);
+        if (ratio < 3) {
+          failures.push(
+            `${theme.name} read action glyph on ${surface.where}: ${ratio.toFixed(2)}:1 ` +
+              '(needs 3:1)',
+          );
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('keeps the load-more control focusable while it is busy', () => {
+    // Native `disabled` would drop focus to the body as soon as the next page
+    // starts; the surface mirrors availability with `aria-disabled` and guards
+    // the handler instead.
+    expect(inboxlineCss).toContain(".il-load-more[aria-disabled='true']");
+    expect(inboxlineCss).not.toContain('.il-load-more:disabled');
   });
 });
 

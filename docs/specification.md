@@ -1031,14 +1031,15 @@ a second controller: every date, counter, group and availability flag comes from
   empty state uses the filter-specific copy. A failed first page keeps any existing
   rows, shows an alert with a retry, and a failed next page is a smaller strip above
   the unchanged rows.
-- The next page is a native button with an explicit “Show more” label; it is
-  disabled while that page loads and disappears at the end of the list. An external
-  invalidation appears as an explicit “Show updates” button and does not reorder
-  the open list before it is used.
-- The counter is announced through the hidden polite live region; row and bulk
-  statuses use their own `role="status"` / `role="alert"`, so the whole list is
-  not read again after a change. The feed does not duplicate the global counter in
-  its header; the bell trigger owns the badge.
+- The next page is a native button with an explicit “Show more” label; it uses
+  `aria-disabled` plus a guarded handler while that page loads, so the focus stays on the
+  control, and it disappears at the end of the list. An external invalidation appears as
+  an explicit “Show updates” button and does not reorder the open list before it is used.
+- The counter is announced through a hidden polite live region with an explicit
+  `role="status"` and `aria-atomic`; row and bulk statuses use their own
+  `role="status"` / `role="alert"`, so the whole list is not read again after a change.
+  The feed does not duplicate the global counter in its header; the bell trigger owns the
+  badge.
 - Filters, paging and updates work in both controlled and uncontrolled modes
   because they call `useInboxUI().setFilter`; the feed never decides the filter on
   its own. Read actions always go through `actions.setRead` and
@@ -1382,6 +1383,66 @@ Accessibility ships with each UI iteration and is audited again in Iteration 18.
 - Contrast is verified by a checkable calculation and/or a browser measurement;
   jsdom and screenshots do not prove contrast.
 
+### Accessibility audit
+
+**Implemented and audited in Iteration 18.** `accessibility.test.tsx` runs axe over
+WCAG 2.0/2.1/2.2 A and AA tags on the real states: both themes, both compositions,
+loading, empty, first-page failure, pending/refused/unknown reads, the external-update
+banner, a refused bulk action and the open portalled dialog. It also drives the whole
+flow with the keyboard through `@testing-library/user-event` and checks names,
+`aria-pressed`/`aria-expanded`/`aria-controls`, the dialog/heading link, the live region
+and focus recovery.
+
+Behaviour fixed by the audit:
+
+- **“Show more” stays focusable while it loads.** It uses `aria-disabled` and a guarded
+  click instead of the native `disabled` attribute; the styles read
+  `[aria-disabled='true']`. A native disabled button would move focus to `body` at the
+  exact moment the visitor asked for the next page.
+- **A completed control hands focus on.** When “Mark all as read”, “Show updates”, a
+  retry or the last “Show more” removes the focused control, focus moves to the active
+  filter instead of being lost. The row-specific hand-off is unchanged: the same control
+  of the next row, then the previous row, then the active filter. A deliberate move
+  elsewhere is never stolen because the fallback only acts when focus fell to `body`.
+- **The live region is an explicit status.** It keeps `aria-live="polite"` and
+  `aria-atomic`, adds `role="status"`, and contains only the counter sentence; the rows
+  and buttons are never inside it. Row and bulk statuses keep their own roles.
+- **The quiet read/unread glyph is still a control.** Its colour is `--il-text-subtle`
+  and its opacity is `0.8` instead of `0.6`. At 60% it measured 2.32:1 on the light
+  unread surface, below the 3:1 WCAG 1.4.11 requires for a non-text control; at 80% the
+  minimum across every row surface is 3.25:1 in the token calculation.
+
+Measured in Chromium 155 through the browser check (CDP, axe-core with
+`color-contrast` enabled; the exact JSON and screenshots live in the ignored
+`.screenshots/` directory):
+
+| What                                | Dark     | Light    |
+| ----------------------------------- | -------- | -------- |
+| axe violations, feed                | 0        | 0        |
+| axe violations, open panel          | 0        | —        |
+| Small caption on the unread surface | 5.75:1   | 5.18:1   |
+| Read/unread glyph (opacity 0.8)     | 4.16:1   | 3.46:1   |
+| Selected filter text                | 6.33:1   | 7.48:1   |
+| Badge count on the accent fill      | 4.83:1   | 4.83:1   |
+| Focus ring against the row surfaces | ≥ 3.19:1 | ≥ 3.04:1 |
+
+Every interactive target measured between 28 and 44 px on both axes (WCAG 2.2 asks for
+24 px). At a 360 px viewport the feed was 336 px wide, at 640 px (200% zoom of a 1280 px
+window) 600 px, and at 320 px 296 px, with no horizontal document overflow in any case.
+The reduced-motion pass removed the panel without a closing frame and returned focus to
+the trigger immediately. Playground buttons are styled with zero specificity so demo
+rules cannot repaint the inbox's own controls and distort these measurements.
+
+Boundaries of the automated checks: jsdom has no layout or paint, so axe runs without
+`color-contrast` there and the colour evidence is the token calculation plus the browser
+measurement; axe does not check non-text contrast at all, so icons and rings are
+calculated rather than axe-approved. The browser pass covers one Chromium; Firefox,
+WebKit and repeatable visual regressions are Iteration 22. Zoom is emulated by reducing
+the layout viewport, not by driving the browser's own zoom UI. If both ready-made
+compositions are mounted under one provider, each keeps its own polite live region, so
+the counter may be announced twice; one composition per provider is recommended for
+announcement purposes while the state stays shared.
+
 ## 7. Toolchain decisions
 
 - pnpm workspace, TypeScript `strict`, tsup for both packages, Vitest for tests.
@@ -1535,6 +1596,7 @@ while a lost answer stays `unknown` and is reconciled. The bulk button uses
 `aria-disabled` with a guarded handler so focus survives a busy queue. In the
 unread filter, the used control's focus moves to the next row, then the previous
 one, and finally to the active filter; it is not stolen if focus moved elsewhere.
+
 Resolved in Iteration 15: `<Inbox />` is the bell popover by default and
 `<Inbox layout="feed" />` is the standalone list. Both are the same surface over
 one controller. The trigger's accessible name joins `listLabel` with the server
@@ -1546,3 +1608,17 @@ Escape and the close button return focus to the trigger, while an outside pointe
 closes without stealing focus. Reopening calls `refresh()`, and closing never
 stops the provider. One provider still owns one `open` value, so two independent
 bells need two providers.
+
+Resolved in Iteration 18: the accessibility contract is verified by axe on the real
+DOM states and by keyboard integration tests, while colour is decided by the token
+calculation and a browser measurement rather than by jsdom. “Show more” stays
+focusable while loading through `aria-disabled` and a guarded handler. When a
+control completes its job and leaves the DOM, focus falls back to the active filter
+only if it fell to `body`; row hand-off keeps its next/previous/filter order. The
+hidden live region is an explicit `role="status"` containing only the counter, and
+row/bulk statuses keep their own roles. The read/unread glyph is faded to `0.8`
+rather than `0.6`, which brings its minimum non-text contrast from 2.32:1 to
+3.25:1 across both themes. Playground button defaults use zero specificity so a
+demo rule cannot repaint the widget under measurement. The remaining boundaries —
+no non-text contrast from axe, a single Chromium, viewport-based zoom emulation and
+two live regions when both compositions share a provider — are listed in section 6.

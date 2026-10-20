@@ -321,14 +321,15 @@ export function App() {
     <main className={`pg-page pg-page-${theme}`}>
       <header className="pg-header">
         <div>
-          <p className="pg-eyebrow">Iteration 17 · soft animations</p>
+          <p className="pg-eyebrow">Iteration 18 · accessibility audit</p>
           <h1>Inboxline layouts</h1>
           <p className="pg-lead">
             The bell opens a non-modal panel placed against its trigger, portalled out of the page
             and capped by the viewport. It shares the feed&apos;s rows, filters and actions, and
             closing it leaves the provider running. The feed remains available as a standalone
             layout, both can be restyled or partially replaced without touching the controller, and
-            the optional Motion kit changes how the same surface moves.
+            the optional Motion kit changes how the same surface moves. The audit covers this whole
+            flow with the keyboard, axe in a real browser and the measured contrast of both themes.
           </p>
         </div>
         <button

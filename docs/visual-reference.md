@@ -143,16 +143,21 @@ are the darker values that pass on every row state.
 The family look is preserved; the following values differ from the reference
 tokens because the darker/lighter value was measured, not chosen:
 
-| Value            | Reference         | Inboxline         | Reason                                                                                           |
-| ---------------- | ----------------- | ----------------- | ------------------------------------------------------------------------------------------------ |
-| Dark subtle text | `#9292a0`         | `#9595a3`         | `#9292a0` on `--il-control-hover` measured 4.49:1, just below 4.5:1.                             |
-| Dark focus ring  | `rgba(..., 0.6)`  | `rgba(..., 0.9)`  | 2.41:1 against `--il-surface`; 4.15:1 is the measured result, and the worst row state is 3.19:1. |
-| Light focus ring | `rgba(..., 0.45)` | `rgba(..., 0.98)` | 1.92:1 against `--il-surface`; 3.37:1 is the measured result, and the worst row state is 3.04:1. |
+| Value             | Reference                    | Inboxline                         | Reason                                                                                                                     |
+| ----------------- | ---------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Dark subtle text  | `#9292a0`                    | `#9595a3`                         | `#9292a0` on `--il-control-hover` measured 4.49:1, just below 4.5:1.                                                       |
+| Dark focus ring   | `rgba(..., 0.6)`             | `rgba(..., 0.9)`                  | 2.41:1 against `--il-surface`; 4.15:1 is the measured result, and the worst row state is 3.19:1.                           |
+| Light focus ring  | `rgba(..., 0.45)`            | `rgba(..., 0.98)`                 | 1.92:1 against `--il-surface`; 3.37:1 is the measured result, and the worst row state is 3.04:1.                           |
+| Read action glyph | quiet control at 60% opacity | `--il-text-subtle` at 0.8 opacity | At 60% the glyph measured 2.32:1 on the light unread surface; 80% keeps it quiet and every row surface is at least 3.25:1. |
 
 `packages/core/src/styles/styles.test.ts` recalculates the contrast of the
-caption, warning, danger, focus and unread-marker colours on every surface. The
-numbers above are reproduced by that test. A browser measurement is still part
-of the visual review; the test does not replace it.
+caption, warning, danger, focus, unread-marker and read-action colours on every
+surface, including the read action's opacity read from the CSS. The numbers
+above are reproduced by that test. The Iteration 18 browser pass measured the
+same pairs in Chromium with axe: the smallest caption on an unread surface was
+5.75:1 dark / 5.18:1 light, the read glyph 4.16:1 / 3.46:1, and the badge
+4.83:1 in both themes. A browser measurement remains part of the visual review;
+the test does not replace it.
 
 ## 3. Classes and states
 

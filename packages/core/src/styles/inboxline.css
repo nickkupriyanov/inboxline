@@ -599,7 +599,14 @@
   border: 1px solid transparent;
   border-radius: var(--il-radius-pill);
   cursor: pointer;
-  opacity: 0.6;
+  /*
+   * The quiet look comes from the subtle colour, not from fading the control.
+   * At 60% the glyph measured 2.32:1 on the light unread surface, below the 3:1
+   * a non-text control needs (WCAG 1.4.11); 80% keeps it quiet and measures at
+   * least 3.25:1 on every row surface in both themes. Hover and focus bring it
+   * to the full text colour.
+   */
+  opacity: 0.8;
   transition:
     color var(--il-duration-fast) var(--il-ease-standard),
     background var(--il-duration-fast) var(--il-ease-standard),
@@ -821,16 +828,21 @@ a.il-item-title {
     transform var(--il-duration-fast) var(--il-ease-soft);
 }
 
-.il-load-more:hover:not(:disabled) {
+.il-load-more:hover:not([aria-disabled='true']) {
   color: var(--il-text);
   background: var(--il-control-hover);
 }
 
-.il-load-more:active:not(:disabled) {
+.il-load-more:active:not([aria-disabled='true']) {
   transform: scale(0.98);
 }
 
-.il-load-more:disabled {
+/*
+ * `aria-disabled` rather than `disabled`: the button stays focusable while the
+ * next page loads, so the visitor's place in the tab order does not vanish under
+ * the request. The handler guards the same state.
+ */
+.il-load-more[aria-disabled='true'] {
   opacity: 0.45;
   cursor: not-allowed;
 }

@@ -17,7 +17,10 @@ body {
   margin: 0;
 }
 
-button {
+/* Zero specificity on purpose: the inbox's own `.il-*` classes must win over
+   these page-level button defaults, otherwise a demo rule repaints an unread
+   row's activation button and distorts the colours the audit measures. */
+:where(.pg-page) :where(button) {
   font: inherit;
   color: inherit;
   cursor: pointer;
@@ -27,16 +30,16 @@ button {
   padding: 7px 12px;
 }
 
-button:hover:not(:disabled) {
+:where(.pg-page) :where(button):hover:not(:disabled) {
   background: #24242c;
 }
 
-button:focus-visible {
+:where(.pg-page) :where(button):focus-visible {
   outline: 2px solid #ff215a;
   outline-offset: 2px;
 }
 
-button:disabled {
+:where(.pg-page) :where(button):disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
@@ -65,12 +68,12 @@ code {
   color: #17171c;
 }
 
-.pg-page-light button {
+:where(.pg-page-light) :where(button) {
   background: #ffffff;
   border-color: #dcdce4;
 }
 
-.pg-page-light button:hover:not(:disabled) {
+:where(.pg-page-light) :where(button):hover:not(:disabled) {
   background: #ececf2;
 }
 
