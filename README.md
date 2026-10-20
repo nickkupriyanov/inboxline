@@ -258,6 +258,7 @@ pnpm typecheck          # tsc --noEmit in every package
 pnpm test               # Vitest in every package
 pnpm build              # build both packages with tsup
 pnpm check:docs         # docs links, exports and the compile-checked examples
+pnpm check:release      # package, changeset and workflow readiness
 pnpm format             # prettier --write
 pnpm format:check       # prettier --check
 pnpm changeset          # describe a change for the next release
@@ -292,11 +293,12 @@ inboxline/
   packages/
     core/      @nickkupriyanov/inboxline-core
     react/     @nickkupriyanov/inboxline-react, .storybook and src/stories
-  docs/        specification, API reference, visual reference, migration
+  docs/        specification, API/visual reference, migration, release runbook
   apps/
     playground/    layouts, states, gallery and HTTP comparison (not published)
     style-stand/   static visual review (not published)
     ssr-example/   server render, seed and hydration (not published)
+  .github/workflows/  CI, version PR and manual release candidate
   tools/
     dev-server/      teaching HTTP server, adapter and tests (private)
     browser-checks/  Playwright regressions (private)

@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workspace:
+    name: Workspace checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Formatting
+        run: pnpm format:check
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Documentation and examples
+        run: pnpm check:docs
+
+      - name: Release readiness
+        run: pnpm check:release
+
+      - name: Build playground and gallery
+        run: pnpm build:playground
+
+      - name: Build Storybook
+        run: pnpm build-storybook
+
+      - name: Upload the playground build
+        uses: actions/upload-artifact@v5
+        with:
+          name: inboxline-playground
+          path: apps/playground/dist
+          retention-days: 7
+
+      - name: Upload Storybook
+        uses: actions/upload-artifact@v5
+        with:
+          name: inboxline-storybook
+          path: packages/react/storybook-static
+          retention-days: 7
+
+  browser:
+    name: Cross-browser checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The browsers live in the workspace, matching the config the suite reads.
+      - name: Install Playwright browsers and system dependencies
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
+        run: pnpm --filter @nickkupriyanov/inboxline-browser-checks exec playwright install --with-deps chromium firefox webkit
+
+      # The suite starts the playground, the SSR example and the teaching server.
+      - name: Layout, states, SSR and reduced motion
+        run: pnpm test:browser
+
+  consumers:
+    name: Packed consumers
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # verify-install builds and packs the libraries, installs React 18, React 19
+      # and the motion consumer from the tarballs, and hydrates the default legs in
+      # Chromium. Only Chromium is needed for that last step.
+      - name: Install Playwright Chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
+        run: pnpm --filter @nickkupriyanov/inboxline-browser-checks exec playwright install --with-deps chromium
+
+      - name: Pack and verify consumers
+        run: pnpm verify:install

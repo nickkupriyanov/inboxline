@@ -23,6 +23,7 @@ const DOCS = [
   'docs/specification.md',
   'docs/visual-reference.md',
   'docs/migration.md',
+  'docs/release.md',
   'packages/core/README.md',
   'packages/react/README.md',
 ];
@@ -81,7 +82,7 @@ for (const [path, text] of contents) {
     const match = /^\s*pnpm\s+([a-zA-Z0-9:_.-]+)/.exec(line);
     if (!match) continue;
     const command = match[1];
-    if (command.startsWith('--')) continue; // global pnpm flags, not a script
+    if (command.startsWith('-')) continue; // global pnpm flags, not a script
     if (!scripts.has(command) && !allowed.has(command)) {
       fail(`${path}: documented command "pnpm ${command}" is not a root script`);
     }

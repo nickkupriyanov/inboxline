@@ -1,0 +1,74 @@
+name: Release candidate
+
+# Manual, read-only job that proves a candidate without publishing it.
+# Artifacts: the packed tarballs, the playground and Storybook. No npm token,
+# no git tag, no GitHub release.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    name: Build and verify the candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
+        run: pnpm --filter @nickkupriyanov/inboxline-browser-checks exec playwright install --with-deps chromium
+
+      - name: Format, types, unit tests, docs and release rules
+        run: |
+          pnpm format:check
+          pnpm typecheck
+          pnpm test
+          pnpm check:docs
+          pnpm check:release
+
+      - name: Pack the packages
+        run: node tools/verify-install.mjs --pack-only .verify/tarballs
+
+      - name: Install the tarballs in clean consumers
+        run: node tools/verify-install.mjs --tarballs .verify/tarballs
+
+      - name: Build the examples
+        run: |
+          pnpm build:playground
+          pnpm build-storybook
+
+      - name: Upload tarballs
+        uses: actions/upload-artifact@v5
+        with:
+          name: inboxline-tarballs
+          path: .verify/tarballs/*.tgz
+          retention-days: 14
+
+      - name: Upload playground
+        uses: actions/upload-artifact@v5
+        with:
+          name: inboxline-candidate-playground
+          path: apps/playground/dist
+          retention-days: 14
+
+      - name: Upload Storybook
+        uses: actions/upload-artifact@v5
+        with:
+          name: inboxline-candidate-storybook
+          path: packages/react/storybook-static
+          retention-days: 14

@@ -65,7 +65,8 @@ approval of the previous iteration. A release requires all of:
 
 The likely commands are `changeset publish` (or `pnpm changeset publish`) with the
 appropriate npm authentication. This repository does not configure or store
-credentials and does not run the command automatically.
+credentials and does not run the command automatically. The CI/version-PR side and
+the candidate checklist are in [`release.md`](./release.md).
 
 ## Migration notes so far
 
