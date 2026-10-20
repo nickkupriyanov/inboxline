@@ -8,5 +8,5 @@
       "@nickkupriyanov/inboxline-core/dom": ["../core/src/dom/index.ts"]
     }
   },
-  "include": ["src", "*.config.ts"]
+  "include": ["src", ".storybook", "*.config.ts"]
 }

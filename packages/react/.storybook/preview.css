@@ -1,0 +1,323 @@
+body {
+  margin: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+.sb-surface {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 48px 24px;
+}
+
+.sb-surface[data-sb-theme='dark'] {
+  color: #f4f4f7;
+  background:
+    radial-gradient(900px 560px at 18% -10%, rgba(255, 33, 90, 0.14), transparent 60%), #08080b;
+}
+
+.sb-surface[data-sb-theme='light'] {
+  color: #17171c;
+  background:
+    radial-gradient(900px 560px at 18% -10%, rgba(255, 33, 90, 0.08), transparent 60%), #f0f0f2;
+}
+
+.sb-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+}
+
+.sb-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sb-caption {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9a9aa6;
+}
+
+.sb-surface[data-sb-theme='light'] .sb-caption {
+  color: #5a5a66;
+}
+
+.sb-note {
+  max-width: 62ch;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #b4b4c2;
+}
+
+.sb-surface[data-sb-theme='light'] .sb-note {
+  color: #5a5a66;
+}
+
+.sb-frame {
+  width: min(100%, 800px);
+}
+
+.sb-narrow {
+  width: 320px;
+  max-width: 100%;
+}
+
+.sb-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.sb-controls button {
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  background: #1d1d24;
+  border: 1px solid #34343e;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.sb-surface[data-sb-theme='light'] .sb-controls button {
+  background: #fff;
+  border-color: #d6d6dd;
+}
+
+/* Customization examples use the published tokens, not a second styling layer. */
+.sb-lilac {
+  --il-accent: #8b5cf6;
+  --il-accent-soft: rgba(139, 92, 246, 0.16);
+  --il-accent-contrast: #ffffff;
+  --il-focus-ring: rgba(139, 92, 246, 0.55);
+  --il-radius-card: 22px;
+  --il-radius-panel: 18px;
+  --il-radius-control: 12px;
+}
+
+.sb-highlight {
+  box-shadow: inset 3px 0 0 var(--il-accent);
+}
+
+.sb-heading-underline {
+  text-decoration: underline;
+  text-decoration-color: var(--il-accent);
+  text-underline-offset: 4px;
+}
+
+/* Headless examples */
+.sb-card {
+  box-sizing: border-box;
+  width: min(100%, 360px);
+  padding: 18px;
+  color: inherit;
+  background: #16161c;
+  border: 1px solid #2b2b34;
+  border-radius: 18px;
+}
+
+.sb-surface[data-sb-theme='light'] .sb-card {
+  background: #fff;
+  border-color: #dcdce3;
+}
+
+.sb-counter {
+  margin: 4px 0 8px;
+  font-size: 32px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.sb-counter-unit {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  opacity: 0.6;
+}
+
+.sb-headless-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 14px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sb-headless-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #2b2b34;
+}
+
+.sb-surface[data-sb-theme='light'] .sb-headless-row {
+  border-color: #e4e4ea;
+}
+
+.sb-headless-row:last-child {
+  border-bottom: 0;
+}
+
+.sb-headless-row button,
+.sb-card button {
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid #3a3a45;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.sb-surface[data-sb-theme='light'] .sb-headless-row button,
+.sb-surface[data-sb-theme='light'] .sb-card button {
+  border-color: #d2d2db;
+}
+
+/* Custom parts */
+.sb-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sb-row-title {
+  padding: 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.sb-row-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0.78;
+}
+
+.sb-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.sb-row-action {
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sb-chip {
+  padding: 2px 8px;
+  color: var(--il-accent-ink, #ff8fac);
+  background: var(--il-accent-soft, rgba(255, 33, 90, 0.16));
+  border-radius: 999px;
+}
+
+.sb-pill {
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid #3a3a45;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.sb-pill[data-selected='true'] {
+  color: var(--il-accent-contrast, #fff);
+  background: var(--il-accent, #ff215a);
+  border-color: transparent;
+}
+
+.sb-surface[data-sb-theme='light'] .sb-pill {
+  border-color: #d2d2db;
+}
+
+.sb-empty {
+  padding: 28px;
+  text-align: center;
+  border: 1px dashed #3a3a45;
+  border-radius: 18px;
+}
+
+.sb-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px;
+  font-size: 13px;
+  border: 1px dashed #3a3a45;
+  border-radius: 18px;
+}
+
+.sb-loading-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--il-accent, #ff215a);
+  animation: sb-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes sb-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* The prepared read control is a circular icon button; the custom row turns it
+   into a text button, so the fixed square has to be released. */
+.sb-row-action {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 5px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+}

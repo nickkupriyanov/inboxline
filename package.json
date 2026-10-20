@@ -2,7 +2,7 @@
   "name": "inboxline-monorepo",
   "version": "0.0.0",
   "private": true,
-  "description": "Monorepo for Inboxline — a framework-free notification inbox core with a React binding",
+  "description": "Monorepo for Inboxline \u2014 a framework-free notification inbox core with a React binding",
   "packageManager": "pnpm@9.8.0",
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
@@ -20,7 +20,10 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,css,json,md}\"",
     "stand": "python3 -m http.server 4174",
     "changeset": "changeset",
-    "version-packages": "changeset version"
+    "version-packages": "changeset version",
+    "storybook": "pnpm --filter @nickkupriyanov/inboxline-react storybook",
+    "build-storybook": "pnpm --filter @nickkupriyanov/inboxline-react build-storybook",
+    "gallery": "pnpm --filter @nickkupriyanov/inboxline-playground exec vite --open /gallery.html"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",

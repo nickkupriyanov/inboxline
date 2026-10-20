@@ -90,8 +90,11 @@ pnpm test          # vitest run in every package
 pnpm build         # build both packages with tsup
 pnpm build:playground  # build the Vite example with both ready-made layouts
 pnpm dev           # run the playground on http://localhost:5173
+pnpm gallery       # open the fixed state gallery at /gallery.html
+pnpm storybook     # run Storybook on http://localhost:6006
+pnpm build-storybook  # build the static Storybook
 pnpm ssr           # run the SSR/hydration example on http://localhost:4175
-pnpm preview       # serve a built playground
+pnpm preview       # serve a built playground (also /gallery.html)
 pnpm format        # prettier --write
 pnpm format:check  # prettier --check
 pnpm changeset     # describe a change for the next release
@@ -108,17 +111,19 @@ step and is never triggered by a local commit.
 inboxline/
   packages/
     core/      @nickkupriyanov/inboxline-core
-    react/     @nickkupriyanov/inboxline-react
+    react/     @nickkupriyanov/inboxline-react, its .storybook and src/stories
   docs/
     specification.md
     visual-reference.md
   apps/
-    playground/    bell, feed and headless provider example (not published)
+    playground/    bell, feed, headless and customization sections, plus the
+                   fixed state gallery at gallery.html (not published)
     style-stand/   static page for visual review (not published)
     ssr-example/   server render, serialisable seed and hydration (not published)
 ```
 
-`tools/`, Storybook and CI arrive in the iterations listed in the roadmap.
+`tools/` and CI arrive in the iterations listed in the roadmap. Storybook and the
+stories are development tooling: the published packages contain `dist` only.
 
 ## License
 

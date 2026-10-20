@@ -11,6 +11,10 @@
  * through `className`/`classNames`. None of them re-implements the controller or
  * the read queue. The final section repeats the feed under the optional
  * `/motion` provider, so the spring kit can be compared with the CSS default.
+ *
+ * Iteration 20 adds a workspace switch, a locale/container section and the link
+ * to the fixed state gallery (`gallery.html`), where every server and optimistic
+ * state is rendered with deterministic data and time.
  */
 import { useState } from 'react';
 import {
@@ -316,28 +320,35 @@ export function App() {
   const [controlledOpen, setControlledOpen] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [opened, setOpened] = useState<string | null>(null);
+  const [workspace, setWorkspace] = useState<'a' | 'b'>('a');
 
   return (
     <main className={`pg-page pg-page-${theme}`}>
       <header className="pg-header">
         <div>
-          <p className="pg-eyebrow">Iteration 18 · accessibility audit</p>
+          <p className="pg-eyebrow">Iteration 20 · gallery and Storybook</p>
           <h1>Inboxline layouts</h1>
           <p className="pg-lead">
             The bell opens a non-modal panel placed against its trigger, portalled out of the page
             and capped by the viewport. It shares the feed&apos;s rows, filters and actions, and
             closing it leaves the provider running. The feed remains available as a standalone
             layout, both can be restyled or partially replaced without touching the controller, and
-            the optional Motion kit changes how the same surface moves. The audit covers this whole
-            flow with the keyboard, axe in a real browser and the measured contrast of both themes.
+            the optional Motion kit changes how the same surface moves. Every loading, empty, error,
+            pending and unknown state is collected in the fixed gallery, and the same widgets are
+            available story by story in Storybook.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
-        >
-          {theme === 'dark' ? 'Light theme' : 'Dark theme'}
-        </button>
+        <div className="pg-header-actions">
+          <a className="pg-link" href="./gallery.html">
+            Open the state gallery →
+          </a>
+          <button
+            type="button"
+            onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+          >
+            {theme === 'dark' ? 'Light theme' : 'Dark theme'}
+          </button>
+        </div>
       </header>
 
       <section className="pg-section">
@@ -395,6 +406,77 @@ export function App() {
             Add an event to workspace B
           </button>
         </div>
+      </section>
+
+      <section className="pg-section">
+        <h2>Switch workspace</h2>
+        <p className="pg-meta">
+          The context is a provider prop. Switching it abandons in-flight work, resets the list and
+          the counter, and loads the other workspace through the same adapter. Nothing from the
+          previous context leaks into the new one.
+        </p>
+        <div className="pg-row">
+          <button type="button" aria-pressed={workspace === 'a'} onClick={() => setWorkspace('a')}>
+            Workspace A
+          </button>
+          <button type="button" aria-pressed={workspace === 'b'} onClick={() => setWorkspace('b')}>
+            Workspace B
+          </button>
+        </div>
+        <InboxProvider
+          adapter={adapter}
+          context={workspace === 'a' ? WORKSPACE_A : WORKSPACE_B}
+          theme={theme}
+        >
+          <Inbox layout="feed" />
+        </InboxProvider>
+      </section>
+
+      <section className="pg-section">
+        <h2>Locales and containers</h2>
+        <p className="pg-meta">
+          The same feed in Russian inside a 320 px container, and in English at the designed 800 px
+          width. Width comes from the container, not the browser window; the filters and rows reflow
+          without horizontal scrolling.
+        </p>
+        <div className="pg-grid">
+          <div style={{ width: 320, maxWidth: '100%' }}>
+            <InboxProvider
+              adapter={adapter}
+              context={WORKSPACE_A}
+              theme={theme}
+              config={{ locale: 'ru', timeZone: 'Europe/Moscow' }}
+            >
+              <Inbox layout="feed" />
+            </InboxProvider>
+          </div>
+          <div style={{ width: 'min(100%, 800px)' }}>
+            <InboxProvider
+              adapter={adapter}
+              context={WORKSPACE_B}
+              theme={theme}
+              config={{ locale: 'en', timeZone: 'UTC' }}
+            >
+              <Inbox layout="feed" />
+            </InboxProvider>
+          </div>
+        </div>
+      </section>
+
+      <section className="pg-section">
+        <h2>State gallery</h2>
+        <p className="pg-meta">
+          The gallery is a separate page with fixed data and a fixed clock: loading, empty,
+          first-page and next-page errors, pending and unknown reads, a refused bulk action, an
+          external update, a 128-unread counter, long content, broken avatars, a narrow container
+          and an adapter without <code>subscribe</code>. Each tile carries <code>data-il-case</code>{' '}
+          and <code>data-il-state</code> so a browser check can find it without parsing the markup.
+        </p>
+        <p className="pg-row">
+          <a className="pg-link" href="./gallery.html">
+            Open gallery.html →
+          </a>
+        </p>
       </section>
 
       <section className="pg-section">

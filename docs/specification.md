@@ -1332,8 +1332,69 @@ header with custom filter pills, and a lilac CSS theme declared through
 the bell (trigger and portalled panel) and the feed under one provider. A final
 section renders the feed through the optional `/motion` provider, so the spring
 kit can be compared with the CSS default in the same page. It imports the
-published stylesheet path through a source alias. It is started with `pnpm dev`
-and built with `pnpm build:playground`; it is not a published package.
+published stylesheet path through a source alias. Iteration 20 adds a workspace
+switch, a locale/container section (Russian at 320 px, English at 800 px) and a
+link to the fixed gallery. It is started with `pnpm dev` and built with
+`pnpm build:playground`; it is not a published package. `pnpm gallery` opens the
+gallery directly.
+
+### Storybook
+
+**Implemented in Iteration 20** (`packages/react/.storybook/`,
+`packages/react/src/stories/`). Storybook 10 on Vite is configured the way both
+references do it: `@storybook/react-vite` with the docs and a11y addons,
+telemetry disabled and `react-docgen-typescript` for prop tables. The config
+aliases `@nickkupriyanov/inboxline-core`, its `/dom` entry and the React package
+to their sources, so a story shows the working tree — a change to core hot
+reloads the story without a prior build. A consumer still imports `dist`.
+
+The 31 stories are grouped as `Layouts`, `States`, `Customization` and
+`Headless`:
+
+- **Layouts** — the seeded feed, the closed and open popover, both compositions
+  under one provider, 320/400/800 px containers, Russian copy, the Motion kit and
+  a server seed. The theme toolbar (`Dark`/`Light`) drives both the backdrop and
+  the widget, and the addon-a11y panel is available per story.
+- **States** — loading, empty, a refused first page, a refused next page, pending
+  and unknown reads, a refused bulk action, an external update, a 128-unread
+  counter, long content, a broken avatar/icon, an adapter without `subscribe`,
+  and a workspace switch with two contexts.
+- **Customization** — a typed row reading `TData`, an alternative header and
+  filter pills, the lilac token theme through `className`/`classNames`, a custom
+  loading block and a custom empty block. Every replacement spreads the prepared
+  slot props rather than re-creating handlers.
+- **Headless** — a custom list and counter driven by `useInboxFlow()`,
+  the same provider serving the bell, the feed and the counter, controlled
+  `filter`/`open`, and the provider with a single feed.
+
+Stories never read the wall clock: `DEMO_NOW` is 20 October 2026, 12:00 UTC, the
+mock adapters are built from explicit fixtures and every provider receives that
+clock. A state is reached with a real adapter or a real public action — a slow
+mutation, a scripted failure, `addNotification()` + `invalidate()`, `setRead`,
+`loadMore` or `markAllRead` — not with a drawing of the state. Commands:
+`pnpm storybook` (port 6006) and `pnpm build-storybook` (static output in
+`packages/react/storybook-static/`, ignored by git).
+
+### The fixed state gallery
+
+`apps/playground/gallery.html` (`src/gallery.tsx`) is the second view of the same
+material, built for visual review and for the browser checks that arrive in
+Iteration 22. It has 16 tiles and a fixed clock:
+
+| Category   | Tiles                                                                                                           |
+| ---------- | --------------------------------------------------------------------------------------------------------------- |
+| Ready      | feed, light theme, 320 px container, open popover, 128 unread, long content, broken avatar/icon, no `subscribe` |
+| Server     | loading, empty, refused first page, refused next page, refused bulk                                             |
+| Optimistic | pending read, unknown read, external update                                                                     |
+
+Every tile renders the real widget and marks itself with `data-il-case`,
+`data-il-state`, `data-il-layout`, `data-il-theme` and `data-il-locale`; a later
+check can find a case without counting figures. `?theme=light` and `?locale=ru`
+select the initial presentation, and the header has view-only toggles for both.
+The same fixture set runs on the page, so a case does not change between visits.
+The gallery deliberately does not use Strict Mode: each state tile performs one
+deliberate mutation, and a double mount would consume a scripted failure with the
+first, abandoned controller. Strict Mode is covered by the React tests instead.
 
 ### Server rendering and hydration
 

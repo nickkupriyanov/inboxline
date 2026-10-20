@@ -1,0 +1,155 @@
+:root {
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  background: #08080b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.gallery {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 32px clamp(16px, 4vw, 40px) 64px;
+  color: #f4f4f7;
+  font-family: inherit;
+}
+
+.gallery[data-il-theme='dark'] {
+  background:
+    radial-gradient(900px 600px at 15% -10%, rgba(255, 33, 90, 0.14), transparent 60%), #08080b;
+}
+
+.gallery[data-il-theme='light'] {
+  color: #17171c;
+  background:
+    radial-gradient(900px 600px at 15% -10%, rgba(255, 33, 90, 0.08), transparent 60%), #f0f0f2;
+}
+
+.gallery__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-end;
+  justify-content: space-between;
+  max-width: 1480px;
+  margin: 0 auto 32px;
+}
+
+.gallery__eyebrow {
+  margin: 0 0 8px;
+  color: #ff215a;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gallery__title {
+  margin: 0 0 10px;
+  font-size: 30px;
+  letter-spacing: -0.02em;
+}
+
+.gallery__lead {
+  max-width: 70ch;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #b4b4c2;
+}
+
+.gallery[data-il-theme='light'] .gallery__lead {
+  color: #5a5a66;
+}
+
+.gallery__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.gallery__toggle {
+  display: inline-flex;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+
+.gallery[data-il-theme='light'] .gallery__toggle {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.gallery__toggle button {
+  padding: 6px 12px;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.gallery__toggle button[aria-pressed='true'] {
+  color: #fff;
+  background: #ff215a;
+}
+
+.gallery__back {
+  color: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+}
+
+.gallery__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  align-items: center;
+  max-width: 1480px;
+  margin: 0 auto;
+}
+
+.gallery__item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(100%, 800px);
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+}
+
+.gallery__item figcaption {
+  color: #9a9aa6;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gallery[data-il-theme='light'] .gallery__item figcaption {
+  color: #5a5a66;
+}
+
+/* The feed and the bell both cap themselves; the figure must be allowed to shrink. */
+.gallery__item .il-root,
+.gallery__item .il-bell {
+  max-width: 100%;
+}
+
+/* Centre the single bell in its tile so the portalled panel opens inside the
+   gallery column instead of being clamped to the viewport edge. */
+.gallery__item[data-il-layout='popover'] .il-bell {
+  margin-inline: auto;
+}

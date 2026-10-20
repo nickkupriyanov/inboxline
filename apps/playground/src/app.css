@@ -292,3 +292,21 @@ h3 {
     transition: none;
   }
 }
+
+.pg-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.pg-link {
+  color: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+}
+
+.pg-link:hover {
+  color: #ff215a;
+}
