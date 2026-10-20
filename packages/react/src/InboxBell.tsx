@@ -14,14 +14,22 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { CSSProperties, ComponentPropsWithRef, JSX } from 'react';
 import { createPortal } from 'react-dom';
-import { observeAvailableArea, restoreFocus } from '@nickkupriyanov/inboxline-core/dom';
+import {
+  REDUCED_MOTION_QUERY,
+  observeAvailableArea,
+  restoreFocus,
+} from '@nickkupriyanov/inboxline-core/dom';
 import type { AvailableArea } from '@nickkupriyanov/inboxline-core/dom';
 import { useClassNames, useInboxComponents, useInboxFlow, useInboxUI } from './context';
+import { useMediaQuery } from './hooks/useMediaQuery';
 import type { SlotProps } from './parts';
 import { InboxSurface } from './components/InboxSurface';
 import { BellIcon } from './components/icons';
 import { placeInboxPanel } from './components/panelPlacement';
 import type { InboxPanelPlacement } from './components/panelPlacement';
+
+/** How long the panel stays mounted for its exit. Mirrors `--il-duration`. */
+const PANEL_EXIT_DURATION = 240;
 
 /** The bell and the non-modal dialog it opens. */
 export function InboxBell(): JSX.Element {
@@ -37,8 +45,12 @@ export function InboxBell(): JSX.Element {
   const panelRef = useRef<HTMLElement>(null);
   const openFromTriggerRef = useRef(false);
   const wasOpenRef = useRef(open);
+  const lastOpenRef = useRef(open);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [exitPending, setExitPending] = useState(false);
   const [placement, setPlacement] = useState<InboxPanelPlacement | null>(null);
+  const reducedMotion = useMediaQuery(REDUCED_MOTION_QUERY);
   const panelId = `il-panel-${useId().replace(/:/g, '')}`;
 
   // The portalled panel exists only in a browser. Rendering it conditionally
@@ -49,17 +61,66 @@ export function InboxBell(): JSX.Element {
 
   // Track the anchor while the panel is open. The observer reports the first
   // measurement synchronously and then only actual changes, so scrolling a
-  // nested container or resizing the window re-places the panel.
+  // nested container or resizing the window re-places the panel. The last
+  // placement is kept through the exit, so the closing card stays where it was
+  // rather than jumping to the corner for its last frame.
   useEffect(() => {
-    if (!open) {
-      setPlacement(null);
-      return undefined;
-    }
+    if (!open) return undefined;
 
     return observeAvailableArea(triggerRef.current, (area: AvailableArea | null) => {
       setPlacement(area === null ? null : placeInboxPanel(area));
     });
   }, [open]);
+
+  // Closing keeps the panel mounted for its exit and marks it inert immediately;
+  // opening during that window cancels the exit rather than stacking a second
+  // card. Under reduced motion nothing is held at all.
+  useEffect(() => {
+    const clearExit = (): void => {
+      if (exitTimerRef.current !== null) clearTimeout(exitTimerRef.current);
+      exitTimerRef.current = null;
+    };
+
+    if (open) {
+      clearExit();
+      lastOpenRef.current = true;
+      setExitPending(false);
+      return;
+    }
+
+    if (reducedMotion) {
+      clearExit();
+      lastOpenRef.current = false;
+      setExitPending(false);
+      return;
+    }
+
+    if (!lastOpenRef.current) return;
+    lastOpenRef.current = false;
+
+    // A controlled close can happen while focus is inline: the panel is about to
+    // leave the interaction tree, so focus goes back to the anchor rather than
+    // staying in an inert element.
+    const panel = panelRef.current;
+    if (panel !== null && panel.contains(document.activeElement)) {
+      restoreFocus(triggerRef.current);
+    }
+
+    setExitPending(true);
+    exitTimerRef.current = setTimeout(() => {
+      exitTimerRef.current = null;
+      setExitPending(false);
+    }, PANEL_EXIT_DURATION);
+  }, [open, reducedMotion]);
+
+  // A timer still pending when the bell goes away must not fire into an unmounted
+  // component.
+  useEffect(
+    () => () => {
+      if (exitTimerRef.current !== null) clearTimeout(exitTimerRef.current);
+    },
+    [],
+  );
 
   // Opening from the trigger moves focus into the dialog so assistive
   // technology announces its title. An open value changed by the application
@@ -154,6 +215,9 @@ export function InboxBell(): JSX.Element {
           ...(placement.top === null ? { bottom: placement.bottom ?? 0 } : { top: placement.top }),
         };
 
+  const closing = !open && (exitPending || (lastOpenRef.current && !reducedMotion));
+  const exitDurationMs = reducedMotion ? 0 : PANEL_EXIT_DURATION;
+
   return (
     <div className={cls('bell', ui.className)} data-il-theme={ui.theme}>
       <Trigger open={open} unreadCount={badgeCount} label={triggerLabel} slotProps={triggerProps}>
@@ -165,7 +229,7 @@ export function InboxBell(): JSX.Element {
         ) : null}
       </Trigger>
 
-      {open && mounted && panelStyle !== null
+      {(open || closing) && mounted && panelStyle !== null
         ? createPortal(
             <InboxSurface
               layout="popover"
@@ -173,6 +237,8 @@ export function InboxBell(): JSX.Element {
               rootRef={panelRef}
               style={panelStyle}
               side={placement?.side}
+              closing={closing}
+              exitDurationMs={exitDurationMs}
               onClose={handleClose}
             />,
             document.body,

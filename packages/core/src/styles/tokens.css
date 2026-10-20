@@ -45,7 +45,7 @@
   --il-row-gap: 2px;
   /* The size of the leading avatar or icon tile. */
   --il-avatar-size: 36px;
-  /* A cap used by a row that leaves the unread selection (Iteration 17). */
+  /* The tallest a row is assumed to be when it leaves the unread selection. */
   --il-row-max-height: 6rem;
   /* How many rows a short panel shows before its list scrolls. */
   --il-list-max-height: 340px;
@@ -62,6 +62,11 @@
   --il-duration-fast: 140ms;
   --il-duration: 240ms;
   --il-duration-slow: 420ms;
+  /* The delay between two rows entering; the index is written inline. */
+  --il-stagger-step: 40ms;
+  --il-index: 0;
+  /* How long a row keeps its place while leaving. Mirrors --il-duration. */
+  --il-exit-duration: var(--il-duration);
 
   /* Palette: dark (default) ------------------------------------------------ */
   color-scheme: dark;

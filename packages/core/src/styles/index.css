@@ -1,5 +1,5 @@
-/* Dev entry: the built stylesheet is a concatenation of these three files.
-   The animation layer (Iteration 17) will be appended after this file. */
+/* Dev entry: the built stylesheet is a concatenation of these four files. */
 @import './tokens.css';
 @import './base.css';
 @import './inboxline.css';
+@import './animations.css';

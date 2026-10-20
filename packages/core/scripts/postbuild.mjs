@@ -11,8 +11,13 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Order matters: tokens, the base layer, then the components. */
-const CSS_SOURCES = ['src/styles/tokens.css', 'src/styles/base.css', 'src/styles/inboxline.css'];
+/** Order matters: tokens, the base layer, the components, then the animation layer. */
+const CSS_SOURCES = [
+  'src/styles/tokens.css',
+  'src/styles/base.css',
+  'src/styles/inboxline.css',
+  'src/styles/animations.css',
+];
 
 const banner = `/*! @nickkupriyanov/inboxline-core — MIT licensed. Generated file, do not edit directly. */\n`;
 const parts = [];

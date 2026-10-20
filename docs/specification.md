@@ -5,7 +5,7 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 15 — the bell and its panel.** The framework-free
+> **Current status: Iteration 17 — soft animations.** The framework-free
 > core is implemented: the notification, context, filter, page, adapter and error
 > types; the RFC 3339 and calendar-day helpers; the boundary checks; the reducer;
 > the resolved configuration with `en`/`ru` copy; the class slots; the derived
@@ -14,20 +14,21 @@ work; this file owns the descriptions.
 > point `@nickkupriyanov/inboxline-core/dom`; and the stylesheet published as
 > `@nickkupriyanov/inboxline-core/styles.css` with a copy on the React entry.
 > `@nickkupriyanov/inboxline-react` publishes `InboxProvider`, `useInboxFlow()`
-> and `useInboxUI()`, and the ready-made `<Inbox />` now renders the default bell
-> popover or, with `layout="feed"`, the standalone feed. Replaceable parts remain
-> **Planned** for Iteration 16.
+> and `useInboxUI()`, the ready-made `<Inbox />` bell popover or feed, replaceable
+> parts and a replaceable animation kit. The optional
+> `@nickkupriyanov/inboxline-react/motion` entry swaps the CSS kit for springs;
+> `motion` stays an optional peer.
 
 ## 1. Packages and entry points
 
 | Entry point                                  | State                                                    | Content                                                                                                                                                                                                                                                                                         |
 | -------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@nickkupriyanov/inboxline-core`             | Contract, state, view, mock and controller (Iteration 9) | Types, adapter contract, boundary checks, errors, context/filter, timestamps, the reducer, the configuration, the copy, the class slots and `cx()`, the derived view model, the deterministic mock adapter and the controller lifecycle, filters, paging, mutations and external invalidations. |
-| `@nickkupriyanov/inboxline-core/dom`         | Browser helpers (Iteration 10)                           | Focus around a non-modal panel, element size observation and the viewport-constrained area around an anchor; no React, no import-time browser access.                                                                                                                                           |
-| `@nickkupriyanov/inboxline-core/styles.css`  | Stylesheet (Iterations 11 and 15)                        | Plain CSS: `--il-*` design tokens for both themes, a scoped base layer, the feed root, rows, states, the bell trigger, badge and portalled panel. Built into `dist/inboxline.css`.                                                                                                              |
-| `@nickkupriyanov/inboxline-react`            | Provider, hooks, layouts and parts (Iteration 16)        | `InboxProvider`, `useInboxFlow()`, `useInboxUI()`, `<Inbox />` with the default bell popover and `layout="feed"`, the default parts and their types, and the provider props plus flow/UI types.                                                                                                 |
+| `@nickkupriyanov/inboxline-core/dom`         | Browser helpers (Iterations 10 and 17)                   | Focus around a non-modal panel, element size and animated-height observation, media queries and the viewport-constrained area around an anchor; no React, no import-time browser access.                                                                                                        |
+| `@nickkupriyanov/inboxline-core/styles.css`  | Stylesheet (Iterations 11, 15 and 17)                    | Plain CSS: `--il-*` design tokens for both themes, a scoped base layer, the feed root, rows, states, the bell trigger, badge and portalled panel, and the animation layer. Built into `dist/inboxline.css`.                                                                                     |
+| `@nickkupriyanov/inboxline-react`            | Provider, hooks, layouts, parts and kits (Iteration 17)  | `InboxProvider`, `useInboxFlow()`, `useInboxUI()`, `<Inbox />` with the default bell popover and `layout="feed"`, the default parts and their types, the provider props plus flow/UI types, `cssAnimations` and the `AnimationKit` types.                                                       |
 | `@nickkupriyanov/inboxline-react/styles.css` | Copy of the core stylesheet (Iteration 11)               | Byte copy of `dist/inboxline.css`, made by the React post-build step.                                                                                                                                                                                                                           |
-| `@nickkupriyanov/inboxline-react/motion`     | Not built yet                                            | Optional Motion entry point — Iteration 17.                                                                                                                                                                                                                                                     |
+| `@nickkupriyanov/inboxline-react/motion`     | Optional Motion entry point (Iteration 17)               | The main public API plus `motionAnimations` and an `InboxProvider` that defaults to them. The only entry point that imports `motion`, which is an optional peer.                                                                                                                                |
 
 The core publishes values from `./adapter`, `./classNames`, `./config`,
 `./context`, `./controller`, `./derive`, `./errors`, `./i18n`, `./mock`,
@@ -57,17 +58,23 @@ public slot type.
 for the binding, not as a second UI layer: it measures and moves focus, and the
 UI layer decides what to do with the result.
 
-| Export                    | Purpose                                                                                                                         |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `focusableWithin`         | The elements inside a container that can take focus right now, in document order.                                               |
-| `focusFirstWithin`        | Puts focus on the first such element, falling back to a focusable container; returns the element focused or `null`.             |
-| `captureFocus`            | Remembers the focused element before a panel opens.                                                                             |
-| `restoreFocus`            | Returns focus to a remembered element if it is still connected; returns whether focus moved.                                    |
-| `measureSize`             | The border-box size of an element, or `{ width: 0, height: 0 }` when there is no element.                                       |
-| `observeSize`             | Reports a size now and on changes; `ResizeObserver` where available, the window resize event otherwise, nothing on a server.    |
-| `measureAvailableArea`    | The anchor rectangle, the layout viewport and the free space on four sides with a margin subtracted; `null` without a viewport. |
-| `observeAvailableArea`    | Reports that area now and after scroll, resize or an anchor size change, without repeating an identical measurement.            |
-| `DEFAULT_VIEWPORT_MARGIN` | The default `8` px gap used by `measureAvailableArea` and `observeAvailableArea`.                                               |
+| Export                    | Purpose                                                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `focusableWithin`         | The elements inside a container that can take focus right now, in document order.                                                    |
+| `focusFirstWithin`        | Puts focus on the first such element, falling back to a focusable container; returns the element focused or `null`.                  |
+| `captureFocus`            | Remembers the focused element before a panel opens.                                                                                  |
+| `restoreFocus`            | Returns focus to a remembered element if it is still connected; returns whether focus moved.                                         |
+| `measureSize`             | The border-box size of an element, or `{ width: 0, height: 0 }` when there is no element.                                            |
+| `measureHeight`           | The border-box height alone, or `0` when there is no element.                                                                        |
+| `observeSize`             | Reports a size now and on changes; `ResizeObserver` where available, the window resize event otherwise, nothing on a server.         |
+| `observeAnimatedHeight`   | Measures an element and reports each change with an `animating` flag that settles after the duration; disabled under reduced motion. |
+| `REDUCED_MOTION_QUERY`    | The `(prefers-reduced-motion: reduce)` string the binding and kits share.                                                            |
+| `canMatchMedia`           | Whether the host has a usable `matchMedia`, without calling it at import time.                                                       |
+| `matchesMediaQuery`       | The current value of a query, or `false` where it cannot be read.                                                                    |
+| `observeMediaQuery`       | Reports a query now and on every change; reports `false` once and watches nothing without `matchMedia`.                              |
+| `measureAvailableArea`    | The anchor rectangle, the layout viewport and the free space on four sides with a margin subtracted; `null` without a viewport.      |
+| `observeAvailableArea`    | Reports that area now and after scroll, resize or an anchor size change, without repeating an identical measurement.                 |
+| `DEFAULT_VIEWPORT_MARGIN` | The default `8` px gap used by `measureAvailableArea` and `observeAvailableArea`.                                                    |
 
 Rules the DOM entry point guarantees:
 
@@ -104,11 +111,12 @@ project prefixes, and a change to either is a change to the published API.
 
 The authored files are concatenated in this order:
 
-| Source                 | Content                                                                |
-| ---------------------- | ---------------------------------------------------------------------- |
-| `styles/tokens.css`    | Shape, layout, type, motion, the dark palette and the light overrides. |
-| `styles/base.css`      | Scoped box model, typography, focus, utilities and reduced motion.     |
-| `styles/inboxline.css` | Root, header, list, day groups, rows and loading/empty/error states.   |
+| Source                  | Content                                                                |
+| ----------------------- | ---------------------------------------------------------------------- |
+| `styles/tokens.css`     | Shape, layout, type, motion, the dark palette and the light overrides. |
+| `styles/base.css`       | Scoped box model, typography, focus, utilities and reduced motion.     |
+| `styles/inboxline.css`  | Root, header, list, day groups, rows and loading/empty/error states.   |
+| `styles/animations.css` | Row entrance/exit, panel entrance/exit and the measured-height clip.   |
 
 The post-build step writes `dist/inboxline.css`. The core publishes it as
 `./styles.css`; the React post-build step copies the same bytes to
@@ -948,23 +956,24 @@ const { unreadCount } = assertInboxUnreadCount(await counterResponse.json());
 
 **Implemented in Iterations 12–16** (`packages/react/src/`). The package publishes
 the runtime exports and types below. Iteration 15 added the bell; Iteration 16
-added the provider-level parts map, class overrides and the default-part exports.
-Parts keep the same contract for the bell and the feed because both render one
-`InboxSurface`.
+added the provider-level parts map, class overrides and the default-part exports;
+Iteration 17 added the animation kit and its optional Motion entry. Parts keep the
+same contract for the bell and the feed because both render one `InboxSurface`.
 
 | Export                                              | Purpose                                                                                                         |
 | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `InboxProvider`                                     | Owns one core controller, starts and stops it, supplies the flow and UI contexts, parts and class overrides.    |
 | `Inbox`                                             | The ready-made bell (`<Inbox />`) or feed (`layout="feed"`): header, filters, rows, actions, paging and states. |
 | `useInboxFlow`                                      | The headless flow: `{ snapshot, actions }` from the nearest provider.                                           |
-| `useInboxUI`                                        | Presentation values, copy and controlled UI state: theme, locale, filter, open, parts and setters.              |
+| `useInboxUI`                                        | Presentation values, copy and controlled UI state: theme, locale, filter, open, parts, kit and setters.         |
 | `DEFAULT_INBOX_COMPONENTS`                          | The complete parts map the widget uses when the application replaces nothing.                                   |
 | `DefaultTrigger`, `DefaultHeader`, `DefaultFilters` | Default parts, so an application can wrap one instead of re-implementing it.                                    |
 | `DefaultNotificationItem`, `DefaultAvatar`          | Default row and leading tile, usable inside a wrapper.                                                          |
 | `DefaultLoading`, `DefaultEmpty`, `DefaultError`, … | Default loading, empty, first-page error and next-page error blocks.                                            |
+| `cssAnimations`                                     | The default zero-dependency kit, printable through `animations` like any other.                                 |
 
 The provider props are `adapter`, `context`, `config`, `clock`, `theme`,
-`className`, `classNames`, `components`, the controlled pairs
+`className`, `classNames`, `components`, `animations`, the controlled pairs
 `filter`/`defaultFilter`/`onFilterChange` and `open`/`defaultOpen`/`onOpenChange`,
 `onNotificationClick`, `markReadOnOpen` (default `true`), `onError` and
 `children`. `InboxFlow<TData, TContextData>` and `InboxUI<TData>` are public
@@ -1172,6 +1181,81 @@ fully custom row uses its own classes inside `slotProps`. The three playground
 examples are rendered in the real browser during review; jsdom tests cover the
 prepared props, class merge, `TData`, state blocks and controller preservation.
 
+### Animations
+
+**Implemented in Iteration 17** (`packages/react/src/animations/`,
+`packages/core/src/dom/height.ts`, `packages/core/src/dom/media.ts`,
+`packages/core/src/styles/animations.css`). Motion is a replaceable layer, not a
+second rendering mode: the markup, the class hooks and the accessibility contract
+stay the library's whichever kit is in use.
+
+`AnimationKit` has two primitives, and both are provider-level, like the parts:
+
+| Primitive | Responsibility                                                                                                                                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Item`    | The `<li>` of a notification row. Receives `index` (zero-based, clamped to 12 for the stagger) and `exiting` (the row is only still mounted for its exit), plus the prepared slot props of `NotificationItem`. It must stay the row element rather than a wrapper. |
+| `Height`  | A container that follows the height of the content it holds while that height changes. The binding measures; the kit decides how the change is carried out.                                                                                                        |
+
+The default is `cssAnimations`, exported from the main entry: both primitives are
+plain elements, and the movement lives in the stylesheet. The optional
+`@nickkupriyanov/inboxline-react/motion` entry exports `motionAnimations` and an
+`InboxProvider` that defaults to it. `motion` is an optional peer and the main
+entry point never imports it; a test walks the module graph in both directions.
+Passing `animations` to either provider still wins over the entry's default.
+
+The CSS hooks are part of the contract a custom kit should keep:
+
+- `.il-row-animated` on every row, with `--il-index` written inline. The stylesheet
+  delays the entrance by `--il-stagger-step` (40 ms) per index.
+- `data-il-exiting="true"` on a row that is leaving. The stylesheet sets
+  `pointer-events: none`, clips it and runs the `il-row-out` collapse for
+  `--il-exit-duration`.
+- `.il-height` / `.il-height-inner`: the outer element gets an inline `height`
+  only while a change is in flight and `data-il-animating="true"` while it clips.
+  The inner element is what the binding measures. Both are left to size
+  themselves once the transition settles.
+- `data-il-motion="true"` marks what a runtime kit animates itself; the stylesheet
+  switches its keyframes and transitions off for those elements.
+
+Exit semantics are deliberately narrower than “anything that disappeared”:
+
+- Only a row the visitor made read — the read action, or activation with
+  `markReadOnOpen` — is held for its exit. A filter change, a refreshed page, a
+  context change and “mark all as read” remove their rows at once, so a bulk
+  replacement never plays as a cascade of individual exits.
+- The held row is already out of the interaction tree when it appears: it is
+  `aria-hidden`, its `data-il-exiting` attribute is set, both prepared button
+  bundles lose their handler and ref, and the row leaves the tab order. The
+  default row renders no buttons at all while exiting. The animation never extends
+  a pending mutation and never changes what core derived.
+- Focus moves on the same commit as the removal, to the next row control or to the
+  unread filter, before the row is hidden. The held row does not block that move.
+- The surface holds the row for `ROW_EXIT_DURATION` (240 ms) and writes the same
+  number to `--il-exit-duration`, so the collapse and the unmount cannot drift.
+  A filter or context change drops held rows immediately; a row that comes back
+  because the server refused the read is rendered live again instead of being
+  duplicated.
+- The bell keeps its panel mounted for the same exit window, with
+  `data-il-closing="true"`, `aria-hidden` and `inert`, and drops it afterwards.
+  Reopening during the window cancels the exit rather than stacking a second
+  panel. The panel is not a second surface: it uses the placement it had while
+  open.
+
+`prefers-reduced-motion: reduce` is honoured twice. The DOM helpers report the
+media query and both hooks disable themselves: no height is measured, no row is
+held, and the panel unmounts at once on close. The stylesheet also collapses
+animations and transitions to 1 ms under the same query, so an application that
+loads only the CSS still gets a calm result. A runtime kit uses Motion's own
+`useReducedMotion` and skips its enter and exit transitions.
+
+Known boundaries: the surface's exit window is a constant shared with the CSS
+tokens; a custom kit that wants a different duration must keep the row mounted
+through its own timer or accept the one the surface gives it. jsdom has no layout
+engine, so the tests assert the hooks, the attributes and the unmount timing, not
+the painted geometry; the visual review covers both themes, the narrow container
+and reduced motion in the browser. The `--il-row-max-height` cap means a very tall
+row is clipped to `6rem` at the start of its collapse; the cap is a token.
+
 ### Lifecycle
 
 - The provider creates exactly one controller during its first render. Creating a
@@ -1244,9 +1328,11 @@ through `addNotification()` + `invalidate()`. Three further sections are the
 Iteration 16 examples: a typed row and avatar reading `TData`, an alternative
 header with custom filter pills, and a lilac CSS theme declared through
 `className`/`classNames` over the published tokens. The theme example shows both
-the bell (trigger and portalled panel) and the feed under one provider. It imports
-the published stylesheet path through a source alias. It is started with
-`pnpm dev` and built with `pnpm build:playground`; it is not a published package.
+the bell (trigger and portalled panel) and the feed under one provider. A final
+section renders the feed through the optional `/motion` provider, so the spring
+kit can be compared with the CSS default in the same page. It imports the
+published stylesheet path through a source alias. It is started with `pnpm dev`
+and built with `pnpm build:playground`; it is not a published package.
 
 ## 5. Visual language
 

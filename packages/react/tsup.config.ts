@@ -1,10 +1,11 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  // One JavaScript entry point for now. The stylesheet is copied into `dist` by
-  // the post-build step; the optional `/motion` entry arrives in Iteration 17.
+  // Two JavaScript entry points: the CSS kit and the optional Motion kit. The
+  // stylesheet is copied into `dist` by the post-build step.
   entry: {
     index: 'src/index.ts',
+    motion: 'src/motion.tsx',
   },
   format: ['esm', 'cjs'],
   dts: true,
@@ -21,7 +22,7 @@ export default defineConfig({
   outExtension({ format }) {
     return { js: format === 'cjs' ? '.cjs' : '.js' };
   },
-  external: ['react', 'react-dom', 'react/jsx-runtime'],
+  external: ['react', 'react-dom', 'react/jsx-runtime', 'motion', 'motion/react'],
   banner: {
     js: "'use client';",
   },

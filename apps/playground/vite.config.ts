@@ -14,6 +14,12 @@ export default defineConfig({
         find: '@nickkupriyanov/inboxline-react/styles.css',
         replacement: source('../../packages/core/src/styles/index.css'),
       },
+      // The Motion entry is a separate module; it must win over the general
+      // package alias below, which would otherwise treat it as a directory.
+      {
+        find: '@nickkupriyanov/inboxline-react/motion',
+        replacement: source('../../packages/react/src/motion.tsx'),
+      },
       // The playground runs against the sources so the dev server hot-reloads
       // the library itself. A consumer imports the built packages instead.
       {

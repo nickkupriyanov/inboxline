@@ -9,7 +9,8 @@
  * The last three sections are the Iteration 16 customisation examples: a typed
  * custom row, an alternative header with custom filters, and a CSS theme applied
  * through `className`/`classNames`. None of them re-implements the controller or
- * the read queue.
+ * the read queue. The final section repeats the feed under the optional
+ * `/motion` provider, so the spring kit can be compared with the CSS default.
  */
 import { useState } from 'react';
 import {
@@ -18,6 +19,7 @@ import {
   type InboxContext,
   type InboxNotification,
 } from '@nickkupriyanov/inboxline-core';
+import { InboxProvider as MotionInboxProvider } from '@nickkupriyanov/inboxline-react/motion';
 import {
   Inbox,
   InboxProvider,
@@ -319,13 +321,14 @@ export function App() {
     <main className={`pg-page pg-page-${theme}`}>
       <header className="pg-header">
         <div>
-          <p className="pg-eyebrow">Iteration 16 · replaceable parts and theming</p>
+          <p className="pg-eyebrow">Iteration 17 · soft animations</p>
           <h1>Inboxline layouts</h1>
           <p className="pg-lead">
             The bell opens a non-modal panel placed against its trigger, portalled out of the page
             and capped by the viewport. It shares the feed&apos;s rows, filters and actions, and
             closing it leaves the provider running. The feed remains available as a standalone
-            layout, and both can be restyled or partially replaced without touching the controller.
+            layout, both can be restyled or partially replaced without touching the controller, and
+            the optional Motion kit changes how the same surface moves.
           </p>
         </div>
         <button
@@ -453,6 +456,25 @@ export function App() {
           <Inbox />
           <Inbox layout="feed" />
         </InboxProvider>
+      </section>
+
+      <section className="pg-section">
+        <h2>Motion kit</h2>
+        <p className="pg-meta">
+          The same feed under <code>@nickkupriyanov/inboxline-react/motion</code>. Rows spring in,
+          the measured height follows its content and a row leaving the unread filter fades and
+          collapses itself. Everything else — the controller, the parts, the class hooks and the
+          accessibility attributes — is identical; switching back to the CSS kit is one provider
+          prop. With <code>prefers-reduced-motion</code> enabled both kits become still.
+        </p>
+        <MotionInboxProvider
+          adapter={adapter}
+          context={WORKSPACE_A}
+          theme={theme}
+          onNotificationClick={(clicked) => setOpened(clicked.title)}
+        >
+          <Inbox layout="feed" />
+        </MotionInboxProvider>
       </section>
     </main>
   );

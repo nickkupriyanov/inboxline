@@ -23,8 +23,9 @@ function read(relativePath: string): string {
 const tokensCss = read('tokens.css');
 const baseCss = read('base.css');
 const inboxlineCss = read('inboxline.css');
+const animationsCss = read('animations.css');
 const indexCss = read('index.css');
-const stylesheet = `${baseCss}\n${inboxlineCss}`;
+const stylesheet = `${baseCss}\n${inboxlineCss}\n${animationsCss}`;
 /** The same files without prose, so comments never satisfy a code assertion. */
 const stylesheetCode = stylesheet.replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -231,13 +232,47 @@ describe('component layer', () => {
     expect(inboxlineCss).toContain('var(--il-duration-fast)');
     expect(inboxlineCss).toContain('var(--il-duration-slow)');
     expect(inboxlineCss).toContain('var(--il-ease-soft)');
+    expect(animationsCss).toContain('var(--il-duration)');
+    expect(animationsCss).toContain('var(--il-ease-soft)');
   });
 
-  it('concatenates the three authored files in order', () => {
+  it('animates rows, the panel and the measured height through class hooks', () => {
+    // Rows enter with a stagger and leave through one collapse.
+    expect(animationsCss).toContain('.il-row-animated');
+    expect(animationsCss).toContain(
+      'animation-delay: calc(var(--il-index, 0) * var(--il-stagger-step))',
+    );
+    expect(animationsCss).toContain('@keyframes il-row-in');
+    expect(animationsCss).toMatch(
+      /\.il-row-animated\[data-il-exiting='true'\]\s*\{[^}]*pointer-events:\s*none;/,
+    );
+    expect(animationsCss).toContain('max-height: var(--il-row-max-height)');
+    expect(animationsCss).toContain('@keyframes il-row-out');
+
+    // The panel enters from the trigger and uses the binding's exit duration.
+    expect(animationsCss).toContain('@keyframes il-panel-in');
+    expect(animationsCss).toContain('@keyframes il-panel-out');
+    expect(animationsCss).toContain('--il-exit-duration');
+    expect(animationsCss).toMatch(
+      /\.il-root\[data-il-layout='popover'\]\[data-il-closing='true'\]\s*\{[^}]*pointer-events:\s*none;/,
+    );
+
+    // The measured height clips only while it is changing.
+    expect(animationsCss).toContain(".il-height[data-il-animating='true']");
+    expect(animationsCss).toContain('.il-height-inner');
+
+    // The Motion kit draws the same hooks and keeps the CSS keyframes out.
+    expect(animationsCss).toContain("[data-il-motion='true']");
+    expect(animationsCss).toMatch(
+      /\.il-row-animated\[data-il-motion='true'\][\s\S]*animation:\s*none;/,
+    );
+  });
+
+  it('concatenates the four authored files in order', () => {
     const imports = [...indexCss.matchAll(/@import\s+'\.\/([\w.-]+)'/g)].map(
       (match) => match[1] as string,
     );
-    expect(imports).toEqual(['tokens.css', 'base.css', 'inboxline.css']);
+    expect(imports).toEqual(['tokens.css', 'base.css', 'inboxline.css', 'animations.css']);
   });
 });
 

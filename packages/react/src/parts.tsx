@@ -205,6 +205,14 @@ export interface AvatarPartProps<TData = unknown> {
 export interface NotificationItemPartProps<TData = unknown> {
   item: InboxItemView<TData>;
   messages: InboxMessages;
+  /** Zero-based position in the rendered list; drives the entrance delay. */
+  index: number;
+  /**
+   * The row is leaving the unread selection and is only still mounted for its
+   * exit. It is already `aria-hidden` and out of the tab order; render it without
+   * interactive controls and do not activate it.
+   */
+  exiting: boolean;
   /** Whether the row should render `activateProps` on a button. */
   activatable: boolean;
   /** Spread on your own `<li>`. */

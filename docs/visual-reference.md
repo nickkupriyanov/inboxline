@@ -19,16 +19,17 @@ stylesheet is authored inside Inboxline and copied nowhere else.
 
 ## 1. Layers and entry points
 
-The authored CSS is split into three files and concatenated, in this order, into
+The authored CSS is split into four files and concatenated, in this order, into
 `packages/core/dist/inboxline.css` by `packages/core/scripts/postbuild.mjs`:
 
-| File                   | Role                                                                   |
-| ---------------------- | ---------------------------------------------------------------------- |
-| `styles/tokens.css`    | Shape, layout, type, motion, the dark palette and the light overrides. |
-| `styles/base.css`      | Scoped box model, typography, focus, utilities, reduced motion.        |
-| `styles/inboxline.css` | Root surface, bell, header, list, day groups, rows and states.         |
+| File                    | Role                                                                   |
+| ----------------------- | ---------------------------------------------------------------------- |
+| `styles/tokens.css`     | Shape, layout, type, motion, the dark palette and the light overrides. |
+| `styles/base.css`       | Scoped box model, typography, focus, utilities, reduced motion.        |
+| `styles/inboxline.css`  | Root surface, bell, header, list, day groups, rows and states.         |
+| `styles/animations.css` | Row stagger/exit, panel enter/leave and the measured-height clip.      |
 
-`styles/index.css` is the development entry that imports the three files. It is
+`styles/index.css` is the development entry that imports the four files. It is
 not published. The public paths are:
 
 - `@nickkupriyanov/inboxline-core/styles.css` → `dist/inboxline.css`
@@ -69,7 +70,7 @@ touching the package.
 | `--il-block-gap`       | `10px`                  | Slotline’s card gap; the rhythm between header and list.                                                |
 | `--il-row-gap`         | `2px`                   | Soundline’s queue gap; keeps a day’s rows visually connected.                                           |
 | `--il-avatar-size`     | `36px`                  | Between Soundline’s 34 px artwork and Slotline’s 34 px icon; a notification needs a short leading tile. |
-| `--il-row-max-height`  | `6rem`                  | Reserved for the exit animation of Iteration 17; no rule reads it yet.                                  |
+| `--il-row-max-height`  | `6rem`                  | The tallest a row is assumed to be while its exit collapses it.                                         |
 | `--il-list-max-height` | `340px`                 | Soundline’s 320 px queue cap, raised for notification rows. Only the popover list scrolls.              |
 
 ### Type and motion
@@ -83,6 +84,9 @@ touching the package.
 | `--il-duration-fast` | `140ms`                                                                                                         | Both references.            |
 | `--il-duration`      | `240ms`                                                                                                         | Both references.            |
 | `--il-duration-slow` | `420ms`                                                                                                         | Both references.            |
+| `--il-stagger-step`  | `40ms`                                                                                                          | Soundline’s queue stagger.  |
+| `--il-index`         | `0`                                                                                                             | Written inline per row.     |
+| `--il-exit-duration` | `var(--il-duration)`                                                                                            | Matches the kit timer.      |
 
 ### Palette
 
@@ -304,9 +308,11 @@ is new; the visual language is not.
 - The static stand shows the feed and the popover surface with hand-written
   markup. The live trigger, the portal and the viewport placement are exercised
   by the playground and the React tests; jsdom cannot measure their real geometry.
-- There is no animation layer yet. `il-shimmer` and `il-pulse` are state feedback,
-  not the open/close and row-exit choreography of Iteration 17.
-  `--il-row-max-height` is reserved for that work.
+- The animation layer is `styles/animations.css`: the row stagger and collapse,
+  the panel enter/leave and the measured-height clip. `il-shimmer` and `il-pulse`
+  remain state feedback; the two layers share the same duration and easing tokens.
+  Under `prefers-reduced-motion` every animation and transition collapses to 1 ms,
+  and the React hooks stop holding rows and stop measuring heights as well.
 - The static stand is not Storybook and not a screenshot suite. Browser
   regression tests arrive in Iteration 22; until then the review is manual.
 - Contrast is measured arithmetically for the authored tokens. The test cannot

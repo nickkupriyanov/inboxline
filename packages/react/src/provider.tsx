@@ -9,6 +9,7 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import type { JSX } from 'react';
 import { resolveInboxConfig } from '@nickkupriyanov/inboxline-core';
+import { cssAnimations } from './animations/css';
 import { InboxFlowContext, InboxUIContext } from './context';
 import type { InboxFlow, InboxProviderProps, InboxUI } from './types';
 import { useInboxController } from './useInboxFlow';
@@ -58,6 +59,7 @@ export function InboxProvider<TData = unknown, TContextData = unknown>(
       theme,
       locale: config.locale,
       messages: config.messages,
+      animations: props.animations ?? cssAnimations,
       ...(props.className === undefined ? {} : { className: props.className }),
       ...(props.classNames === undefined ? {} : { classNames: props.classNames }),
       ...(props.components === undefined ? {} : { components: props.components }),
@@ -73,6 +75,7 @@ export function InboxProvider<TData = unknown, TContextData = unknown>(
     [
       theme,
       config,
+      props.animations,
       props.className,
       props.classNames,
       props.components,

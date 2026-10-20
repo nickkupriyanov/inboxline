@@ -6,9 +6,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as dom from './index';
 
 /**
- * The entry point of the browser half: focus around a non-modal panel, size
- * observation and the viewport-constrained area around an anchor. A new runtime
- * export has to be listed here.
+ * The entry point of the browser half: focus around a non-modal panel, size and
+ * height observation, media queries and the viewport-constrained area around an
+ * anchor. A new runtime export has to be listed here.
  */
 const EXPECTED_EXPORTS: readonly string[] = [
   // available area
@@ -20,7 +20,15 @@ const EXPECTED_EXPORTS: readonly string[] = [
   'focusFirstWithin',
   'focusableWithin',
   'restoreFocus',
+  // height
+  'observeAnimatedHeight',
+  // media
+  'REDUCED_MOTION_QUERY',
+  'canMatchMedia',
+  'matchesMediaQuery',
+  'observeMediaQuery',
   // size
+  'measureHeight',
   'measureSize',
   'observeSize',
 ];
@@ -74,6 +82,22 @@ describe('importing the DOM entry point', () => {
     expect(() => stopSize()).not.toThrow();
 
     expect(dom.measureSize(null)).toEqual({ width: 0, height: 0 });
+    expect(dom.measureHeight(null)).toBe(0);
+    expect(dom.matchesMediaQuery(dom.REDUCED_MOTION_QUERY)).toBe(false);
+
+    const heights: unknown[] = [];
+    const stopHeight = dom.observeAnimatedHeight(element, {
+      onChange: (state) => heights.push(state),
+    });
+    expect(heights).toEqual([{ height: 20, animating: false }]);
+    expect(() => stopHeight()).not.toThrow();
+
+    const media: boolean[] = [];
+    const stopMedia = dom.observeMediaQuery(dom.REDUCED_MOTION_QUERY, (matches) =>
+      media.push(matches),
+    );
+    expect(media).toEqual([false]);
+    expect(() => stopMedia()).not.toThrow();
 
     const areas: Array<unknown> = [];
     const stopArea = dom.observeAvailableArea(element, (area) => areas.push(area));

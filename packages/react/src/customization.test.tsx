@@ -93,7 +93,7 @@ describe('className and classNames', () => {
     expect(container.querySelector('.il-header')?.className).toBe('il-header app-header');
     expect(container.querySelector('.il-filters')?.className).toBe('il-filters app-filters');
     expect(container.querySelector('.il-filter')?.className).toBe('il-filter app-filter');
-    expect(container.querySelector('.il-item')?.className).toBe('il-item app-item');
+    expect(container.querySelector('.il-item')?.className).toBe('il-row-animated il-item app-item');
     expect(container.querySelector('.il-item-title')?.className).toBe('il-item-title app-title');
   });
 

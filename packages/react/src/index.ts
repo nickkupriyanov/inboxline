@@ -11,13 +11,16 @@
  * ```
  *
  * The stylesheet is published next to this entry as
- * `@nickkupriyanov/inboxline-react/styles.css`.
+ * `@nickkupriyanov/inboxline-react/styles.css`. This entry uses the zero-cost CSS
+ * animation kit; `@nickkupriyanov/inboxline-react/motion` swaps in springs and is
+ * the only entry that imports `motion`.
  */
 
 export { Inbox } from './Inbox';
 export type { InboxProps } from './Inbox';
 export { InboxProvider } from './provider';
 export { useInboxFlow, useInboxUI } from './context';
+export { cssAnimations } from './animations/css';
 export {
   DEFAULT_INBOX_COMPONENTS,
   DefaultAvatar,
@@ -45,5 +48,14 @@ export type {
   SlotProps,
   TriggerPartProps,
 } from './parts';
-export type { InboxClassNames, InboxFlow, InboxProviderProps, InboxTheme, InboxUI } from './types';
+export type {
+  AnimationKit,
+  HeightProps,
+  InboxClassNames,
+  InboxFlow,
+  InboxProviderProps,
+  InboxTheme,
+  InboxUI,
+  ItemProps,
+} from './types';
 export type * from '@nickkupriyanov/inboxline-core';

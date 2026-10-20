@@ -1,0 +1,159 @@
+/* ==========================================================================
+   Animation layer: the hooks the animation kits render through and the
+   transitions that run on their own.
+
+   The kits own the markup, this file owns the look:
+     .il-row-animated                    a notification row, delayed by
+                                         `--il-index` (written inline)
+     .il-row-animated[data-il-exiting]   a row on its way out of the unread
+                                         selection: it fades and collapses while
+                                         the binding keeps it mounted
+     .il-height / .il-height-inner       a container that follows the height of
+                                         what it holds while it changes
+     .il-root[data-il-layout='popover']  the panel: it enters from its trigger
+                                         and leaves once the binding confirms
+                                         the exit
+
+   The Motion kit (see `@nickkupriyanov/inboxline-react/motion`) draws the same
+   classes and marks what it animates itself with `data-il-motion='true'`, which
+   keeps the CSS keyframes out of its way.
+
+   Nothing here is required for the widget to work: without this file the inbox
+   renders and behaves the same, it just does not move. Every animation collapses
+   under `prefers-reduced-motion: reduce` through the kill switch in base.css.
+   ========================================================================== */
+
+/* Notification rows -------------------------------------------------------- */
+
+/*
+ * `backwards` matters: a row that has not had its turn yet must be invisible
+ * rather than flash and then fade in. The index is clamped by the kit, so a long
+ * list does not crawl in for several seconds.
+ */
+.il-row-animated {
+  animation: il-row-in var(--il-duration) var(--il-ease-soft) backwards;
+  animation-delay: calc(var(--il-index, 0) * var(--il-stagger-step));
+}
+
+@keyframes il-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* A row on its way out ----------------------------------------------------- */
+
+/*
+ * A row removed from the unread selection stays mounted for the length of its
+ * exit, so it can leave instead of vanishing, and the rows below close the gap
+ * once it is unmounted. Both halves of that timing come from one number: the
+ * binding writes the duration inline as `--il-exit-duration` and runs its
+ * removal timer with the same value, so the collapse and the unmount cannot
+ * drift apart.
+ *
+ * The fade is over before the collapse is: the row is invisible by the time it
+ * is clipping its own content. `overflow` is here rather than in the row's own
+ * rule so the row is only ever clipped while it is going away. It is already
+ * `aria-hidden` and out of the tab order before this starts; pointer events are
+ * refused as the third way of taking it out of interaction.
+ */
+.il-row-animated[data-il-exiting='true'] {
+  overflow: hidden;
+  pointer-events: none;
+  animation: il-row-out var(--il-exit-duration, var(--il-duration)) var(--il-ease-soft) forwards;
+}
+
+@keyframes il-row-out {
+  from {
+    max-height: var(--il-row-max-height);
+    opacity: 1;
+  }
+
+  40% {
+    opacity: 0;
+  }
+
+  to {
+    max-height: 0;
+    opacity: 0;
+  }
+}
+
+/* The panel ---------------------------------------------------------------- */
+
+/*
+ * The panel enters from the side of its trigger. The binding keeps it mounted
+ * for the exit and marks it `data-il-closing`; the stylesheet is what turns that
+ * into a transition. The origin follows the side the placement chose, so the
+ * movement starts at the anchor rather than at the middle of the card.
+ */
+.il-root[data-il-layout='popover'] {
+  transform-origin: top right;
+  animation: il-panel-in var(--il-duration) var(--il-ease-soft);
+}
+
+.il-root[data-il-layout='popover'][data-il-side='top'] {
+  transform-origin: bottom right;
+  animation-name: il-panel-in-top;
+}
+
+.il-root[data-il-layout='popover'][data-il-closing='true'] {
+  pointer-events: none;
+  animation: il-panel-out var(--il-exit-duration, var(--il-duration)) var(--il-ease-standard)
+    forwards;
+}
+
+@keyframes il-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@keyframes il-panel-in-top {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+@keyframes il-panel-out {
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+/* A container that follows its content height ------------------------------ */
+
+/*
+ * The duration is written inline by the binding, so the moment this container
+ * stops clipping and the transition that carried the height can never drift
+ * apart. Only the timing function belongs to the stylesheet.
+ */
+.il-height {
+  transition-property: height;
+  transition-timing-function: var(--il-ease-soft);
+}
+
+/* The moment a binding clips content: without it the new height would show
+   through at once and the transition would be invisible. */
+.il-height[data-il-animating='true'] {
+  overflow: hidden;
+}
+
+/* The wrapper adds a box, not a gap: the blocks keep the root's rhythm. */
+.il-height-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--il-block-gap);
+  min-height: 0;
+}
+
+/* The Motion kit drives these elements itself. */
+.il-row-animated[data-il-motion='true'],
+.il-height[data-il-motion='true'] {
+  animation: none;
+  transition: none;
+}

@@ -10,9 +10,10 @@
 import { createContext, useCallback, useContext, useMemo } from 'react';
 import { IL_CLASS, cx } from '@nickkupriyanov/inboxline-core';
 import type { ClassValue, IlClassSlot } from '@nickkupriyanov/inboxline-core';
+import { cssAnimations } from './animations/css';
 import { DEFAULT_INBOX_COMPONENTS } from './parts';
 import type { InboxComponents } from './parts';
-import type { InboxFlow, InboxUI } from './types';
+import type { AnimationKit, InboxFlow, InboxUI } from './types';
 
 /** Internal: `null` until a provider supplies the flow. */
 export const InboxFlowContext = createContext<InboxFlow<unknown, unknown> | null>(null);
@@ -76,6 +77,16 @@ export function useInboxComponents<TData = unknown>(): Required<InboxComponents<
     () => ({ ...DEFAULT_INBOX_COMPONENTS, ...components }) as Required<InboxComponents<TData>>,
     [components],
   );
+}
+
+/**
+ * The animation kit the built-in parts render through.
+ *
+ * Internal to the built-in components: an application swaps the kit through the
+ * provider, never by re-implementing a row or a height container here.
+ */
+export function useAnimations(): AnimationKit {
+  return useInboxUI().animations;
 }
 
 /**

@@ -20,6 +20,7 @@ const EXPECTED_EXPORTS: readonly string[] = [
   'DefaultTrigger',
   'Inbox',
   'InboxProvider',
+  'cssAnimations',
   'useInboxFlow',
   'useInboxUI',
 ];

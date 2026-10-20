@@ -6,7 +6,7 @@
  * re-exported here, so a binding imports one package without a second copy of
  * the types.
  */
-import type { ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import type {
   IlClassSlot,
   InboxActions,
@@ -44,6 +44,59 @@ export type InboxTheme = 'dark' | 'light';
  * keeps only its base class. `className` is the simpler whole-widget override.
  */
 export type InboxClassNames = Partial<Record<IlClassSlot, string>>;
+
+/* -------------------------------------------------------------------------- */
+/*  Animation kit                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The animation primitives the ready-made widget renders through.
+ *
+ * The markup stays the library's — the two primitives are the only thing a kit
+ * replaces, so the widget's DOM, accessibility contract and class hooks are the
+ * same whichever kit is in use. The default kit is pure CSS and ships in the main
+ * entry point; `@nickkupriyanov/inboxline-react/motion` swaps in spring-based
+ * variants and is the only entry point that pulls `motion` in.
+ *
+ * A custom kit is expected to keep two promises:
+ *
+ * - render the same class hooks (`il-row-animated`, `il-height`/`il-height-inner`)
+ *   and the `data-il-exiting`/`data-il-motion` attributes, so the stylesheet and
+ *   the visual states keep working;
+ * - keep `Item` the row element itself — an `<li>` inside the list of its day —
+ *   and honour `exiting` by rendering the row without interactive controls.
+ */
+export interface AnimationKit {
+  /** The row element of a notification list; the default part renders through it. */
+  Item: (props: ItemProps) => ReactNode;
+  /**
+   * A container that follows the height of the content it holds. Measuring is
+   * the binding's half; the kit only decides how the change is carried out.
+   */
+  Height: (props: HeightProps) => ReactNode;
+}
+
+/**
+ * A notification row drawn by an animation kit.
+ *
+ * The prepared slot props of `NotificationItem` are spread on this element, so it
+ * stays the `<li>` of the list rather than a wrapper around one.
+ */
+export interface ItemProps extends ComponentPropsWithoutRef<'li'> {
+  /** Zero-based position in the rendered list; drives the entrance delay. */
+  index: number;
+  /**
+   * The row is leaving the unread selection. It is already `aria-hidden` and out
+   * of the tab order; a kit must not make it interactive again, only let it go.
+   */
+  exiting: boolean;
+}
+
+/** The measured container of a section whose content height changes. */
+export interface HeightProps {
+  className?: string;
+  children: ReactNode;
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Provider props                                                             */
@@ -98,6 +151,14 @@ export interface InboxProviderProps<TData = unknown, TContextData = unknown> {
    * widgets under one provider cannot drift apart.
    */
   components?: InboxComponents<TData>;
+  /**
+   * Replace the built-in animation kit. Default: `cssAnimations`, the pure-CSS
+   * kit from the main entry point. Pass `motionAnimations` from
+   * `@nickkupriyanov/inboxline-react/motion` (or a kit of your own) to change how
+   * rows and the measured sections move; behaviour and accessibility stay the
+   * library's.
+   */
+  animations?: AnimationKit;
 
   /**
    * Controlled list filter. Fixes the filter's mode when the provider is
@@ -175,6 +236,8 @@ export interface InboxUI<TData = unknown> {
   classNames?: InboxClassNames | undefined;
   /** Parts the application replaced; anything absent falls back to the default. */
   components?: InboxComponents<TData> | undefined;
+  /** The animation kit the built-in parts render through. */
+  animations: AnimationKit;
   /** The filter the loaded rows belong to. */
   filter: InboxFilter;
   /** Asks for another filter; in controlled mode this only calls `onFilterChange`. */

@@ -21,6 +21,11 @@ export function measureSize(element: Element | null | undefined): ElementSize {
   return { width: rect.width, height: rect.height };
 }
 
+/** The border-box height of an element, or `0` when it cannot be read. */
+export function measureHeight(element: Element | null | undefined): number {
+  return measureSize(element).height;
+}
+
 /**
  * Reports an element's size now and whenever it changes. Returns the remover.
  *

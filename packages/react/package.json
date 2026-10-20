@@ -36,6 +36,11 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./motion": {
+      "types": "./dist/motion.d.ts",
+      "import": "./dist/motion.js",
+      "require": "./dist/motion.cjs"
+    },
     "./styles.css": "./dist/inboxline.css",
     "./package.json": "./package.json"
   },
@@ -50,8 +55,14 @@
     "@nickkupriyanov/inboxline-core": "workspace:^"
   },
   "peerDependencies": {
+    "motion": "^11.0.0 || ^12.0.0 || ^13.0.0 || ^14.0.0",
     "react": "^18.2.0 || ^19.0.0",
     "react-dom": "^18.2.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "motion": {
+      "optional": true
+    }
   },
   "scripts": {
     "build": "tsup && node scripts/postbuild.mjs",
@@ -67,6 +78,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "jsdom": "^30.1.2",
+    "motion": "^14.1.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tsup": "^8.5.1",

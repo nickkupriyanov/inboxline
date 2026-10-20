@@ -8,12 +8,16 @@
  * placement tests; jsdom has no layout engine.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Inbox, InboxProvider } from './index';
 import type { InboxProviderProps } from './index';
 import { CONTEXT_A, createFixtureAdapter, notification, testClock } from './test/fixtures';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function renderBell(
   options: Parameters<typeof createFixtureAdapter>[0] = {},
@@ -104,6 +108,61 @@ describe('Inbox bell', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it('keeps the panel mounted for its exit, inert, then removes it', async () => {
+    renderBell({ pageSize: 4 });
+    await openBell();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    // The role is already gone from the accessibility tree, but the card is still
+    // in the DOM for the exit and cannot receive a pointer or the keyboard.
+    const closing = document.querySelector('[data-il-closing="true"]') as HTMLElement | null;
+    expect(closing).not.toBeNull();
+    expect(closing?.getAttribute('aria-hidden')).toBe('true');
+    expect(closing?.hasAttribute('inert')).toBe(true);
+    expect(closing?.style.getPropertyValue('--il-exit-duration')).toBe('240ms');
+
+    await waitFor(() => expect(document.querySelector('[data-il-closing="true"]')).toBeNull());
+  });
+
+  it('removes the panel at once under prefers-reduced-motion', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => true,
+      })),
+    );
+
+    renderBell({ pageSize: 4 });
+    await openBell();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(document.querySelector('[data-il-closing="true"]')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('reopens during the exit without stacking a second panel', async () => {
+    renderBell({ pageSize: 4 });
+    const { trigger } = await openBell();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.querySelector('[data-il-closing="true"]')).not.toBeNull();
+
+    fireEvent.click(trigger);
+
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(document.querySelector('[data-il-closing="true"]')).toBeNull();
   });
 
   it('closes on an outside pointer without taking focus from the clicked element', async () => {

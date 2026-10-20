@@ -16,9 +16,15 @@
  * “Unread” label makes the state part of the row's text for assistive technology.
  * A pending or lost read operation adds a text status; colour is never the only
  * signal.
+ *
+ * The row element comes from the animation kit (`Item`), so the entrance stagger
+ * and the exit are transitions on the row itself rather than a wrapper appearing
+ * between the day's list and its rows. A row that is `exiting` is already
+ * `aria-hidden` and out of the tab order; it is drawn without either button, so
+ * nothing can be activated in the moment it is collapsing.
  */
 import type { JSX } from 'react';
-import { useClassNames } from '../context';
+import { useAnimations, useClassNames } from '../context';
 import type { NotificationItemPartProps } from '../parts';
 import { CheckIcon, UnreadDotIcon } from './icons';
 
@@ -26,6 +32,8 @@ import { CheckIcon, UnreadDotIcon } from './icons';
 export function NotificationItem<TData = unknown>({
   item,
   messages,
+  index,
+  exiting,
   activatable,
   slotProps,
   activateProps,
@@ -34,6 +42,7 @@ export function NotificationItem<TData = unknown>({
   status,
 }: NotificationItemPartProps<TData>): JSX.Element {
   const cls = useClassNames();
+  const { Item } = useAnimations();
 
   const content = (
     <>
@@ -53,17 +62,19 @@ export function NotificationItem<TData = unknown>({
   );
 
   return (
-    <li {...slotProps}>
+    <Item index={index} exiting={exiting} {...slotProps}>
       {avatar}
 
       <div className={cls('itemContent')}>
-        {activatable ? <button {...activateProps}>{content}</button> : content}
+        {activatable && !exiting ? <button {...activateProps}>{content}</button> : content}
         {status}
       </div>
 
-      <button {...readProps}>{item.read ? <UnreadDotIcon /> : <CheckIcon />}</button>
+      {exiting ? null : (
+        <button {...readProps}>{item.read ? <UnreadDotIcon /> : <CheckIcon />}</button>
+      )}
 
       <span className={cls('itemUnreadMarker')} aria-hidden="true" />
-    </li>
+    </Item>
   );
 }
