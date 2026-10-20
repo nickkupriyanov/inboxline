@@ -5,19 +5,17 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 17 — soft animations.** The framework-free
-> core is implemented: the notification, context, filter, page, adapter and error
-> types; the RFC 3339 and calendar-day helpers; the boundary checks; the reducer;
-> the resolved configuration with `en`/`ru` copy; the class slots; the derived
-> view; the deterministic mock adapter; the controller with lifecycle, first page,
-> counter, filters, paging, mutations and external updates; the browser entry
-> point `@nickkupriyanov/inboxline-core/dom`; and the stylesheet published as
-> `@nickkupriyanov/inboxline-core/styles.css` with a copy on the React entry.
-> `@nickkupriyanov/inboxline-react` publishes `InboxProvider`, `useInboxFlow()`
-> and `useInboxUI()`, the ready-made `<Inbox />` bell popover or feed, replaceable
-> parts and a replaceable animation kit. The optional
-> `@nickkupriyanov/inboxline-react/motion` entry swaps the CSS kit for springs;
-> `motion` stays an optional peer.
+> **Current status: Iteration 24 — documentation.** The v1 surface is
+> implemented and verified end to end. The framework-free core owns the
+> notification, context, filter, page, adapter and error contracts, the RFC 3339
+> and calendar helpers, the boundary checks, the reducer, configuration and copy,
+> the class slots, the derived view, the deterministic mock adapter, the
+> controller and the browser helpers. The React binding publishes the provider,
+> hooks, the bell/feed widget, replaceable parts and two animation kits. Server
+> rendering with a serialisable seed, cross-browser checks and clean-tarball
+> consumer installs are part of the verified contract. The API tables are in
+> [`reference.md`](./reference.md); the sequence and status live in
+> [`../roadmap.md`](../roadmap.md).
 
 ## 1. Packages and entry points
 
@@ -1760,12 +1758,9 @@ published by these commands. CI and release automation remain Iterations 25.
 
 ## 8. Open questions
 
-These are intentionally unresolved and are decided by the iteration that needs
-them:
-
-- How a backend that cannot report a `markAllRead` boundary should express it —
-  the v1 contract requires one, and an adapter for such a backend has to
-  synthesise it (Iteration 21, with the HTTP example).
+There are no unresolved contract questions for v1. The notes below record the
+decisions the iterations made; a future incompatible change follows
+[`migration.md`](./migration.md).
 
 Resolved in Iteration 1: the success shape of `markAllRead` is
 `{ boundary, unreadCount }` and an unknown outcome is `InboxError` with
@@ -1923,3 +1918,10 @@ visitor's language and zone once after mounting, with explicit fields winning.
 Without a seed an idle list renders as loading rather than empty. The bell panel
 is still client-only; its trigger only claims to be expanded once the panel can
 exist, which keeps a `defaultOpen` server render identical to its hydration.
+
+Resolved in Iteration 24: a backend that cannot report a `markAllRead` boundary
+must synthesise one from the server's clock at the moment the operation is
+applied — for example from a response timestamp or the HTTP `Date` header — and
+document that choice. The client's clock is not acceptable: it can be minutes
+away and would leave the wrong rows unread. The example HTTP server returns the
+boundary explicitly (`through`), and the adapter maps it to `boundary` unchanged.

@@ -1,0 +1,24 @@
+{
+  "name": "@nickkupriyanov/inboxline-docs-check",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Documentation checks for Inboxline: links, anchors, exports, class/token/message tables and compile-checked examples",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "check": "node check.mjs"
+  },
+  "dependencies": {
+    "@nickkupriyanov/inboxline-core": "workspace:*",
+    "@nickkupriyanov/inboxline-react": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "motion": "^14.1.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^5.9.3"
+  }
+}

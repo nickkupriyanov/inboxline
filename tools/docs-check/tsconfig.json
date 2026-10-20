@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "@nickkupriyanov/inboxline-react/motion": ["../../packages/react/src/motion.tsx"],
+      "@nickkupriyanov/inboxline-react": ["../../packages/react/src/index.ts"],
+      "@nickkupriyanov/inboxline-core/dom": ["../../packages/core/src/dom/index.ts"],
+      "@nickkupriyanov/inboxline-core": ["../../packages/core/src/index.ts"]
+    }
+  },
+  "include": ["examples.tsx"]
+}

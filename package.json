@@ -30,7 +30,8 @@
     "test:browser": "pnpm --filter @nickkupriyanov/inboxline-browser-checks test:browser",
     "install:browsers": "pnpm --filter @nickkupriyanov/inboxline-browser-checks install:browsers",
     "verify:install": "node tools/verify-install.mjs",
-    "verify:install:leg": "node tools/verify-install.mjs --leg"
+    "verify:install:leg": "node tools/verify-install.mjs --leg",
+    "check:docs": "pnpm build && pnpm --filter @nickkupriyanov/inboxline-docs-check typecheck && pnpm --filter @nickkupriyanov/inboxline-docs-check check"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
