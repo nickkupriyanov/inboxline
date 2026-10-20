@@ -103,7 +103,9 @@ describe('InboxProvider loading', () => {
     expect(screen.getByTestId('main-titles').textContent).toBe('Fourth,Third');
     expect(screen.getByTestId('main-filter').textContent).toBe('all');
     expect(screen.getByTestId('main-theme').textContent).toBe('dark');
-    expect(screen.getByTestId('main-locale').textContent).toBe('en');
+    // With no explicit config the browser language replaces the server fallback
+    // after mounting; jsdom reports `en-US`.
+    expect(screen.getByTestId('main-locale').textContent).toBe('en-US');
   });
 
   it('shares one snapshot between two consumers of the same provider', async () => {

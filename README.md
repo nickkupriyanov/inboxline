@@ -67,6 +67,18 @@ routing and any external event source.
 - pnpm 9.8 (`packageManager` is pinned; Corepack honours it)
 - React 18.2 or 19 for the React binding
 
+## Server rendering
+
+Both packages import without a DOM. For a populated first paint, build an
+`InboxInitialData` from the first page, the unread counter and a timestamp, pass
+it as `initialData` to `InboxProvider`, embed the same JSON in the response and
+give it to `hydrateRoot`. Without a seed the server renders the loading skeleton.
+Locale and time zone use the deterministic `en`/`UTC` fallback during render; the
+binding detects the visitor's preferences after mounting unless the application
+passed them explicitly. The complete contract is in
+[`docs/specification.md`](./docs/specification.md#server-rendering-and-hydration),
+and `pnpm ssr` runs the example.
+
 ## Commands
 
 Run everything from the repository root:
@@ -78,6 +90,7 @@ pnpm test          # vitest run in every package
 pnpm build         # build both packages with tsup
 pnpm build:playground  # build the Vite example with both ready-made layouts
 pnpm dev           # run the playground on http://localhost:5173
+pnpm ssr           # run the SSR/hydration example on http://localhost:4175
 pnpm preview       # serve a built playground
 pnpm format        # prettier --write
 pnpm format:check  # prettier --check
@@ -102,6 +115,7 @@ inboxline/
   apps/
     playground/    bell, feed and headless provider example (not published)
     style-stand/   static page for visual review (not published)
+    ssr-example/   server render, serialisable seed and hydration (not published)
 ```
 
 `tools/`, Storybook and CI arrive in the iterations listed in the roadmap.

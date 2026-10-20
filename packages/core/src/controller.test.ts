@@ -284,6 +284,138 @@ describe('creation and snapshot', () => {
   });
 });
 
+describe('server-rendered initial data', () => {
+  const LABEL_NOW = Date.parse('2026-10-18T13:00:00Z');
+
+  it('exposes a seeded page, counter and time anchor before any request', () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({
+      adapter: script.adapter,
+      // The injected clock is one hour ahead on purpose: the first snapshot
+      // must use the seed's anchor, not the machine that is rendering.
+      clock: clockAt(LABEL_NOW + 3_600_000),
+      config: { locale: 'en', timeZone: 'UTC' },
+      initialData: {
+        page: page(
+          [
+            note('a', { createdAt: '2026-10-18T12:56:00Z' }),
+            note('b', { createdAt: '2026-10-18T12:40:00Z' }),
+          ],
+          'cursor-2',
+        ),
+        unreadCount: 27,
+        now: LABEL_NOW,
+      },
+    });
+
+    expect(script.calls.lists).toHaveLength(0);
+    expect(script.calls.counts).toHaveLength(0);
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.listStatus).toBe('ready');
+    expect(snapshot.state.countStatus).toBe('ready');
+    expect(snapshot.state.order).toEqual(['a', 'b']);
+    expect(snapshot.state.unreadCount).toBe(27);
+    expect(snapshot.state.nextCursor).toBe('cursor-2');
+    expect(snapshot.state.pending.reads).toEqual({});
+    expect(snapshot.state.pending.bulk).toBeNull();
+    expect(snapshot.view.list.items.map((item) => item.id)).toEqual(['a', 'b']);
+    expect(snapshot.view.list.items[0]?.timeLabel).toBe('4 minutes ago');
+    expect(snapshot.view.counter.label).toBe('27 unread notifications');
+    expect(controller.getSnapshot()).toBe(snapshot);
+  });
+
+  it('keeps an unknown counter and an empty page honest', () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({
+      adapter: script.adapter,
+      clock: clockAt(LABEL_NOW),
+      initialData: { page: page([]), unreadCount: null, now: LABEL_NOW },
+    });
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.listStatus).toBe('ready');
+    expect(snapshot.state.countStatus).toBe('idle');
+    expect(snapshot.state.unreadCount).toBeNull();
+    expect(snapshot.view.list.empty).toBe(true);
+    expect(snapshot.view.counter.known).toBe(false);
+  });
+
+  it('still confirms a seeded first paint with the adapter on start', async () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({
+      adapter: script.adapter,
+      clock: clockAt(LABEL_NOW),
+      config: { locale: 'en', timeZone: 'UTC' },
+      initialData: { page: page([note('seed')]), unreadCount: 2, now: LABEL_NOW },
+    });
+
+    controller.start();
+    expect(script.calls.lists).toHaveLength(1);
+    expect(script.calls.counts).toHaveLength(1);
+    // A live refresh keeps the seeded rows until the server answers.
+    expect(controller.getSnapshot().state.order).toEqual(['seed']);
+    expect(controller.getSnapshot().state.listStatus).toBe('loading');
+
+    script.lists[0].resolve(page([note('live')]));
+    script.counts[0].resolve({ unreadCount: 1 });
+    await flush();
+
+    const snapshot = controller.getSnapshot();
+    expect(snapshot.state.order).toEqual(['live']);
+    expect(snapshot.state.unreadCount).toBe(1);
+    expect(snapshot.state.listStatus).toBe('ready');
+  });
+
+  it('spends the seed anchor when the binding asks for live time', () => {
+    const script = createScriptedAdapter();
+    const controller = createInboxController({
+      adapter: script.adapter,
+      clock: clockAt(LABEL_NOW + 3_600_000),
+      config: { locale: 'en', timeZone: 'UTC' },
+      initialData: { page: page([note('a')]), unreadCount: 1, now: LABEL_NOW },
+    });
+
+    expect(controller.getSnapshot().view.list.items[0]?.timeLabel).toBe('5 minutes ago');
+
+    controller.refreshTime();
+
+    expect(controller.getSnapshot().view.list.items[0]?.timeLabel).toBe('1 hour ago');
+  });
+
+  it('rejects a malformed seed instead of rendering an unpageable list', () => {
+    const script = createScriptedAdapter();
+
+    expect(() =>
+      createInboxController({
+        adapter: script.adapter,
+        clock: clockAt(LABEL_NOW),
+        initialData: {
+          page: { items: [{ id: 'broken' }], nextCursor: null } as unknown as InboxPage,
+          unreadCount: 1,
+          now: LABEL_NOW,
+        },
+      }),
+    ).toThrow(RangeError);
+
+    expect(() =>
+      createInboxController({
+        adapter: script.adapter,
+        clock: clockAt(LABEL_NOW),
+        initialData: { page: page([]), unreadCount: -1, now: LABEL_NOW },
+      }),
+    ).toThrow(RangeError);
+
+    expect(() =>
+      createInboxController({
+        adapter: script.adapter,
+        clock: clockAt(LABEL_NOW),
+        initialData: { page: page([]), unreadCount: 0, now: Number.NaN },
+      }),
+    ).toThrow(RangeError);
+  });
+});
+
 describe('start and stop', () => {
   it('loads the first page and the counter in parallel', async () => {
     const script = createScriptedAdapter();

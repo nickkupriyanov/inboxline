@@ -43,9 +43,10 @@
  *   into the first occurrence, and a cursor the chain has already requested ends
  *   the list instead of looping.
  * - **Time is injected.** The snapshot is derived from the injected clock on
- *   every read; `refreshTime()` lets a binding announce that the wall clock
- *   moved, and the derivation is memoised by the minute so repeated reads in the
- *   same minute return the very same object.
+ *   every read, except while a server-rendered seed supplies the first anchor;
+ *   `refreshTime()` lets a binding announce that the wall clock moved, and the
+ *   derivation is memoised by the minute so repeated reads in the same minute
+ *   return the very same object.
  *
  * The controlled UI values are deliberately *not* part of this vocabulary. The
  * open state of the bell panel, the focus and the portal belong to the binding,
@@ -58,6 +59,8 @@ import {
   assertInboxPage,
   assertInboxReadStatusResult,
   assertInboxUnreadCount,
+  isInboxPage,
+  isInboxUnreadCount,
 } from './adapter';
 import type { InboxAdapter, InboxReadStatusResult } from './adapter';
 import { resolveInboxConfig } from './config';
@@ -227,6 +230,41 @@ export interface InboxCallbacks<TData = unknown> {
   onError?(error: InboxError): void;
 }
 
+/**
+ * The first snapshot of a server render, in a form that survives serialisation.
+ *
+ * It holds only server data and the instant the labels were derived from: no
+ * pending operation, no callback, no adapter, no credential and no React value,
+ * so an application can embed it in the HTML and hand the very same object to
+ * the client.
+ *
+ * ```ts
+ * const data: InboxInitialData = {
+ *   page: await adapter.getNotifications({ context, filter: 'all', cursor: null, signal }),
+ *   unreadCount: (await adapter.getUnreadCount({ context })).unreadCount,
+ *   now: Date.now(),
+ * };
+ * ```
+ *
+ * The seed is a first paint, not a cache: `start()` still loads the first page
+ * and the counter, so the client confirms the server's answer instead of
+ * trusting the HTML until the next refresh.
+ *
+ * @typeParam TData — Application data carried by every notification.
+ */
+export interface InboxInitialData<TData = unknown> {
+  /** The first page the server rendered, exactly as the adapter returned it. */
+  page: InboxPage<TData>;
+  /**
+   * The server's unread counter, or `null` when it was unknown.
+   *
+   * `null` keeps the honest “unknown” state instead of pretending zero unread.
+   */
+  unreadCount: number | null;
+  /** Epoch milliseconds the server derived relative and day labels from. */
+  now: number;
+}
+
 /** Everything `createInboxController()` accepts. */
 export interface InboxControllerOptions<TData = unknown, TContextData = unknown> {
   /** The notification source. Required: the inbox cannot know a list on its own. */
@@ -239,6 +277,15 @@ export interface InboxControllerOptions<TData = unknown, TContextData = unknown>
   config?: InboxConfigInput;
   /** Time source for the derived view. Default: {@link systemInboxClock}. */
   clock?: InboxClock;
+  /**
+   * The server-rendered first page, counter and time anchor.
+   *
+   * Read only when the controller is created, so a server render and its
+   * hydration produce the same first snapshot. The rows are confirmed data:
+   * pending operations are always empty, and `start()` still verifies them with
+   * the adapter.
+   */
+  initialData?: InboxInitialData<TData>;
   /** Application callbacks. Their exceptions are contained. */
   callbacks?: InboxCallbacks<TData>;
 }
@@ -335,6 +382,31 @@ function requireNotificationId(id: string): void {
 }
 
 /**
+ * Checks a seed before it becomes confirmed state.
+ *
+ * The same rules an adapter answer has to satisfy apply here: a seed is data
+ * from outside the library, even when the application built it itself. A
+ * malformed one fails at creation with a range error rather than rendering a
+ * list the core cannot page or count.
+ */
+function requireInitialData<TData>(data: InboxInitialData<TData>): InboxInitialData<TData> {
+  if (!isInboxPage(data.page)) {
+    throw new RangeError(
+      'Inboxline: initialData.page must be { items, nextCursor } with valid notifications',
+    );
+  }
+  if (data.unreadCount !== null && !isInboxUnreadCount({ unreadCount: data.unreadCount })) {
+    throw new RangeError(
+      'Inboxline: initialData.unreadCount must be a non-negative integer or null',
+    );
+  }
+  if (!Number.isFinite(data.now)) {
+    throw new RangeError('Inboxline: initialData.now must be a finite epoch millisecond value');
+  }
+  return data;
+}
+
+/**
  * Structural comparison of two resolved configurations, so re-supplying equal
  * values — which a binding does on every render — never invalidates a snapshot.
  */
@@ -393,10 +465,36 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
   requireFilter(initialFilter);
 
   let config = resolveInboxConfig(options.config);
+  const initialData =
+    options.initialData === undefined ? null : requireInitialData(options.initialData);
+  /**
+   * The seed's instant, used until the binding asks for live time or starts.
+   *
+   * The server and the first client render must derive the very same labels, so
+   * the seed supplies the time anchor rather than the two machines' clocks. The
+   * anchor is spent by `start()` (which confirms the data anyway) and by an
+   * explicit `refreshTime()`.
+   */
+  let seededNowMs: number | null = initialData?.now ?? null;
   let state = createInboxState<TData>({
     contextKey: context.key,
     filter: initialFilter,
   });
+
+  if (initialData !== null) {
+    state = inboxReducer(state, {
+      type: 'listLoaded',
+      token: state.listToken,
+      page: initialData.page,
+    });
+    if (initialData.unreadCount !== null) {
+      state = inboxReducer(state, {
+        type: 'countLoaded',
+        token: state.countToken,
+        unreadCount: initialData.unreadCount,
+      });
+    }
+  }
 
   /* -- bookkeeping ---------------------------------------------------------- */
 
@@ -624,7 +722,7 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
   /* -- snapshot ------------------------------------------------------------- */
 
   function anchorNow(): InboxTimeAnchor {
-    const nowMs = clock.now();
+    const nowMs = seededNowMs ?? clock.now();
     return createInboxTimeAnchor(Number.isFinite(nowMs) ? nowMs : 0, config.timeZone);
   }
 
@@ -1241,6 +1339,9 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     },
 
     refreshTime() {
+      // The seed's instant served the first paint; an explicit time update is
+      // the binding saying the live clock is now the source of truth.
+      seededNowMs = null;
       const key = snapshotKey(anchorNow());
       if (key === lastViewKey) return;
       lastViewKey = key;
@@ -1261,6 +1362,9 @@ export function createInboxController<TData = unknown, TContextData = unknown>(
     start() {
       if (started) return;
       started = true;
+      // The first live load confirms the seeded first paint, so the seed's clock
+      // is no longer needed: from here every label follows the injected clock.
+      seededNowMs = null;
       // `refresh` opens the invalidation subscription before the first request,
       // so an event that arrives during the initial load is not missed.
       void refresh();

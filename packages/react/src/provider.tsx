@@ -8,7 +8,6 @@
  */
 import { useMemo, useSyncExternalStore } from 'react';
 import type { JSX } from 'react';
-import { resolveInboxConfig } from '@nickkupriyanov/inboxline-core';
 import { cssAnimations } from './animations/css';
 import { InboxFlowContext, InboxUIContext } from './context';
 import type { InboxFlow, InboxProviderProps, InboxUI } from './types';
@@ -37,7 +36,7 @@ export function InboxProvider<TData = unknown, TContextData = unknown>(
   const { children } = props;
   const theme = props.theme ?? 'dark';
   const markReadOnOpen = props.markReadOnOpen ?? true;
-  const { controller, setFilter, open, setOpen } = useInboxController(props);
+  const { controller, config, setFilter, open, setOpen } = useInboxController(props);
 
   const snapshot = useSyncExternalStore(
     controller.subscribe,
@@ -49,10 +48,6 @@ export function InboxProvider<TData = unknown, TContextData = unknown>(
     () => ({ snapshot, actions: controller.actions }),
     [snapshot, controller],
   );
-
-  // The provider resolves the same configuration the controller does, so the
-  // copy a custom part receives cannot drift from the copy the derived view used.
-  const config = useMemo(() => resolveInboxConfig(props.config), [props.config]);
 
   const ui = useMemo<InboxUI<TData>>(
     () => ({

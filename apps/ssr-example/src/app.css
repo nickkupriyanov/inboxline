@@ -1,0 +1,54 @@
+:root {
+  color-scheme: dark;
+  background: #0e0e13;
+  color: #f4f4f7;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+.ssr-example {
+  display: grid;
+  gap: 28px;
+  justify-items: center;
+  margin: 0 auto;
+  max-width: 840px;
+  padding: 56px 20px 72px;
+}
+
+.ssr-example__header {
+  width: min(100%, 800px);
+}
+
+.ssr-example__eyebrow {
+  color: #ff215a;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin: 0 0 10px;
+  text-transform: uppercase;
+}
+
+.ssr-example__title {
+  font-size: 32px;
+  letter-spacing: -0.02em;
+  margin: 0 0 12px;
+}
+
+.ssr-example__lead {
+  color: #b4b4c2;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 62ch;
+}
+
+.ssr-example > .il-root {
+  width: min(100%, 800px);
+}

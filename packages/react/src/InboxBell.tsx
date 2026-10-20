@@ -193,17 +193,6 @@ export function InboxBell(): JSX.Element {
   const triggerLabel = `${ui.messages.listLabel}. ${counterLabel}`;
   const badgeCount = view.counter.unreadCount;
 
-  const triggerProps: SlotProps<ComponentPropsWithRef<'button'>> = {
-    type: 'button',
-    ref: triggerRef,
-    className: cls('trigger'),
-    'aria-label': triggerLabel,
-    'aria-haspopup': 'dialog',
-    'aria-expanded': open,
-    'aria-controls': open ? panelId : undefined,
-    onClick: handleTrigger,
-  };
-
   const panelStyle: CSSProperties | null =
     placement === null
       ? null
@@ -214,6 +203,23 @@ export function InboxBell(): JSX.Element {
           maxHeight: placement.maxHeight,
           ...(placement.top === null ? { bottom: placement.bottom ?? 0 } : { top: placement.top }),
         };
+
+  // The panel is client-only and needs a measurement, so the trigger is only
+  // "expanded" once it can actually point at one. A server render and the first
+  // client render therefore never disagree, even when `defaultOpen` is true, and
+  // the attribute never describes a panel that is not there yet.
+  const expanded = open && mounted && panelStyle !== null;
+
+  const triggerProps: SlotProps<ComponentPropsWithRef<'button'>> = {
+    type: 'button',
+    ref: triggerRef,
+    className: cls('trigger'),
+    'aria-label': triggerLabel,
+    'aria-haspopup': 'dialog',
+    'aria-expanded': expanded,
+    'aria-controls': expanded ? panelId : undefined,
+    onClick: handleTrigger,
+  };
 
   const closing = !open && (exitPending || (lastOpenRef.current && !reducedMotion));
   const exitDurationMs = reducedMotion ? 0 : PANEL_EXIT_DURATION;

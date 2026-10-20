@@ -7,13 +7,17 @@
  * controller's snapshot, so the React half never formats a counter, filters a
  * list or schedules a request on its own.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_FILTER,
   DEFAULT_INBOX_CONTEXT,
   createInboxController,
   isInboxFilter,
+  resolveInboxConfig,
 } from '@nickkupriyanov/inboxline-core';
+import type { InboxConfig } from '@nickkupriyanov/inboxline-core';
+import { detectInboxBrowserPreferences, mergeInboxConfigInput } from './browserPreferences';
+import type { InboxBrowserPreferences } from './browserPreferences';
 import type { InboxContext, InboxController, InboxFilter, InboxProviderProps } from './types';
 
 /* -------------------------------------------------------------------------- */
@@ -62,6 +66,8 @@ function initialOpenOf<TData, TContextData>(
 /** What the provider needs beyond the controller itself. */
 export interface InboxControllerState<TData = unknown, TContextData = unknown> {
   controller: InboxController<TData, TContextData>;
+  /** The configuration the controller currently derives with. */
+  config: InboxConfig;
   setFilter(filter: InboxFilter): void;
   open: boolean;
   setOpen(open: boolean): void;
@@ -106,6 +112,18 @@ export function useInboxController<TData = unknown, TContextData = unknown>(
   const [uncontrolledOpen, setUncontrolledOpen] = useState(initialOpen);
   const uncontrolledOpenRef = useRef(initialOpen);
 
+  /**
+   * What the browser reported after mounting. Empty during the server render and
+   * the first client render, so both use the core's deterministic fallback.
+   */
+  const [browserPreferences, setBrowserPreferences] = useState<InboxBrowserPreferences>({});
+
+  const configInput = useMemo(
+    () => mergeInboxConfigInput(props.config, browserPreferences),
+    [props.config, browserPreferences],
+  );
+  const config = useMemo(() => resolveInboxConfig(configInput), [configInput]);
+
   const warnedRef = useRef<Set<string>>(new Set());
   const warnOnce = useCallback((key: string, message: string) => {
     if (isProduction() || warnedRef.current.has(key)) return;
@@ -119,8 +137,9 @@ export function useInboxController<TData = unknown, TContextData = unknown>(
       adapter: props.adapter,
       context: (props.context ?? DEFAULT_INBOX_CONTEXT) as InboxContext<TContextData>,
       filter: initialFilter,
-      config: props.config,
+      config: configInput,
       ...(props.clock === undefined ? {} : { clock: props.clock }),
+      ...(props.initialData === undefined ? {} : { initialData: props.initialData }),
       callbacks: {
         // Every callback reads the latest props, so re-rendering never leaves a
         // stale handler behind and no controller has to be recreated for it.
@@ -139,8 +158,32 @@ export function useInboxController<TData = unknown, TContextData = unknown>(
       (current.context ?? DEFAULT_INBOX_CONTEXT) as InboxContext<TContextData>,
     );
     controller.actions.setAdapter(current.adapter);
-    controller.updateConfig(current.config ?? {});
+    controller.updateConfig(configInput);
   });
+
+  // The browser may tell us the visitor's language and zone, but only after the
+  // first render has matched the server. An explicit value always wins, and this
+  // effect never runs on a server.
+  useEffect(() => {
+    if (
+      propsRef.current.config?.locale !== undefined &&
+      propsRef.current.config?.timeZone !== undefined
+    ) {
+      return;
+    }
+
+    const detected = detectInboxBrowserPreferences();
+    if (detected.locale === undefined && detected.timeZone === undefined) return;
+
+    // Update the controller before React renders again, so the copy and the
+    // derived rows change together rather than one commit apart.
+    controller.updateConfig(mergeInboxConfigInput(propsRef.current.config, detected));
+    setBrowserPreferences((previous) =>
+      previous.locale === detected.locale && previous.timeZone === detected.timeZone
+        ? previous
+        : detected,
+    );
+  }, [controller]);
 
   // The UI values are fixed in mode; only the controlled ones have to be pushed
   // into the controller. The uncontrolled filter reaches it through `setFilter`.
@@ -262,6 +305,7 @@ export function useInboxController<TData = unknown, TContextData = unknown>(
 
   return {
     controller,
+    config,
     setFilter,
     open: modes.open ? lastControlledOpenRef.current : uncontrolledOpen,
     setOpen,

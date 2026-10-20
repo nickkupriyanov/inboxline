@@ -972,8 +972,8 @@ same contract for the bell and the feed because both render one `InboxSurface`.
 | `DefaultLoading`, `DefaultEmpty`, `DefaultError`, … | Default loading, empty, first-page error and next-page error blocks.                                            |
 | `cssAnimations`                                     | The default zero-dependency kit, printable through `animations` like any other.                                 |
 
-The provider props are `adapter`, `context`, `config`, `clock`, `theme`,
-`className`, `classNames`, `components`, `animations`, the controlled pairs
+The provider props are `adapter`, `context`, `config`, `clock`, `initialData`,
+`theme`, `className`, `classNames`, `components`, `animations`, the controlled pairs
 `filter`/`defaultFilter`/`onFilterChange` and `open`/`defaultOpen`/`onOpenChange`,
 `onNotificationClick`, `markReadOnOpen` (default `true`), `onError` and
 `children`. `InboxFlow<TData, TContextData>` and `InboxUI<TData>` are public
@@ -1335,6 +1335,79 @@ kit can be compared with the CSS default in the same page. It imports the
 published stylesheet path through a source alias. It is started with `pnpm dev`
 and built with `pnpm build:playground`; it is not a published package.
 
+### Server rendering and hydration
+
+**Implemented in Iteration 19** (`packages/core/src/controller.ts`,
+`packages/react/src/browserPreferences.ts`, `apps/ssr-example/`). The contract is
+deliberately small: a server render is an ordinary React render, the first
+snapshot is either empty-and-loading or seeded, and hydration uses exactly the
+same inputs.
+
+**Deterministic configuration.** `resolveInboxConfig()` falls back to the
+constants `en` and `UTC`, never to the machine it runs on, so a server and its
+client resolve the same values from the same input. After mounting, the React
+provider reads `navigator.languages` / `navigator.language` and
+`Intl.DateTimeFormat().resolvedOptions().timeZone` once and merges only the fields
+the application omitted; an explicit `locale` or `timeZone` wins, and an
+undefined field keeps the constant until the effect runs. Detection happens in
+an effect, never during render, so the first client render still matches the
+server. It is not a subscription: a language changed in another tab is picked up
+on the next mount. A value the application passed but `Intl` rejects is still
+passed to `resolveInboxConfig`, which replaces it with the constant rather than
+letting detection override the application's intent.
+
+**The seed.** `InboxInitialData<TData>` is public and has exactly three fields:
+
+| Field         | Meaning                                                             |
+| ------------- | ------------------------------------------------------------------- |
+| `page`        | The first page the server rendered: `{ items, nextCursor }`.        |
+| `unreadCount` | The server counter, or `null` when it was unknown.                  |
+| `now`         | Epoch milliseconds the server derived relative and day labels from. |
+
+It contains no pending operation, adapter, callback, React element, token or
+credential, so `JSON.stringify()` is enough — escape `<` when embedding it in a
+script tag. `createInboxController()` validates the seed with the same rules as
+an adapter answer and throws `RangeError` for a malformed page, counter or
+anchor, because an unpageable first paint is worse than a failed request. The
+seed produces confirmed rows and a ready list, plus a ready counter when
+`unreadCount` is a number; `null` keeps the counter unknown. The pending layer
+is empty.
+
+`initialData` is read only when the controller is created. The rows stay on
+screen while `start()` performs the first real request, and its answer replaces
+the chain exactly like a refresh. The seed's `now` is the time anchor until
+`start()` or `refreshTime()` is called; after that the injected clock is the only
+source, so a client clock that disagrees with the server cannot leave relative
+labels frozen at the server's minute.
+
+Without a seed, a server render shows the loading skeleton: an `idle` list is
+treated as “about to load”, not as an empty inbox. `start()` is still an effect,
+so the server itself never sends a request.
+
+**Portal and ids.** The panel is created only after mounting, and the trigger
+reports `aria-expanded`/`aria-controls` only once the panel can exist. A server
+render of `<Inbox />` therefore always contains the collapsed bell, even with
+`defaultOpen`; the expanded state appears after hydration. Heading and panel ids
+come from `useId()`, which React keeps stable between the server render and
+hydration. The feed renders no portal at all.
+
+**The runnable example.** `apps/ssr-example/` renders the same `<App>` in both
+entries. Its server entry reads a first page and the counter from the mock
+adapter, builds the seed, renders with `renderToString()` and embeds the seed in
+the HTML; the client entry calls `hydrateRoot()` with the same seed and then lets
+the provider's `start()` confirm it. Start it with `pnpm ssr` on
+<http://localhost:4175>. Vite runs in middleware mode for the example, so the
+server entry is compiled on demand; production build, asset serving and caching
+belong to the consuming application.
+
+**Boundaries.** The server render is synchronous: streaming, Suspense-based data
+fetching and per-request caching are not part of the library. The application
+must serialise the seed and pass the same configuration, theme and seed to both
+renders; a mismatch is application error and React reports it as a hydration
+mismatch. The seed is a first paint, not an authorisation boundary — do not put
+tenant secrets or unfiltered data into it. Hydration is verified in jsdom and by
+a Chromium run of the example; Firefox and Safari are covered by Iteration 22.
+
 ## 5. Visual language
 
 **Implemented in Iteration 11** (`packages/core/src/styles/`, see also
@@ -1471,8 +1544,6 @@ announcement purposes while the state stays shared.
 These are intentionally unresolved and are decided by the iteration that needs
 them:
 
-- Whether preloading data for server rendering needs a serialisable seed beyond
-  the controller contexts (Iteration 19).
 - How a backend that cannot report a `markAllRead` boundary should express it —
   the v1 contract requires one, and an adapter for such a backend has to
   synthesise it (Iteration 21, with the HTTP example).
@@ -1622,3 +1693,14 @@ rather than `0.6`, which brings its minimum non-text contrast from 2.32:1 to
 demo rule cannot repaint the widget under measurement. The remaining boundaries —
 no non-text contrast from axe, a single Chromium, viewport-based zoom emulation and
 two live regions when both compositions share a provider — are listed in section 6.
+
+Resolved in Iteration 19: the server-render seed is `InboxInitialData<TData>` —
+`{ page, unreadCount, now }` and nothing else. It is validated like an adapter
+answer, applied as confirmed state at controller creation, and used as the time
+anchor until `start()` or `refreshTime()`. The provider accepts it as
+`initialData`; the same value must reach the hydrating render. Configuration keeps
+the deterministic `en`/`UTC` fallback during render, and the binding detects the
+visitor's language and zone once after mounting, with explicit fields winning.
+Without a seed an idle list renders as loading rather than empty. The bell panel
+is still client-only; its trigger only claims to be expanded once the panel can
+exist, which keeps a `defaultOpen` server render identical to its hydration.

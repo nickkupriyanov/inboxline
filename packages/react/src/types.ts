@@ -16,6 +16,7 @@ import type {
   InboxContext,
   InboxError,
   InboxFilter,
+  InboxInitialData,
   InboxMessages,
   InboxNotification,
   InboxSnapshot,
@@ -126,10 +127,26 @@ export interface InboxProviderProps<TData = unknown, TContextData = unknown> {
   adapter: InboxAdapter<TData, TContextData>;
   /** The user/workspace to read. Default: the implicit context (`'default'`). */
   context?: InboxContext<TContextData>;
-  /** Presentation settings: locale, time zone and message overrides. */
+  /**
+   * Presentation settings: locale, time zone and message overrides.
+   *
+   * A field left out is detected from the browser after mounting; the server
+   * render and the first client render use the deterministic `en`/`UTC`
+   * fallback, so hydration never has to reconcile a guessed locale.
+   */
   config?: InboxConfigInput;
   /** Time source for the derived view. Default: the system clock. */
   clock?: InboxClock;
+  /**
+   * The first page, counter and time anchor rendered on the server.
+   *
+   * Serialise it into the page and pass the same value to the client render:
+   * the rows, the counter and every relative label then match on both sides.
+   * Only read when the provider creates its controller; `start()` still confirms
+   * the data with the adapter after hydration. Never put pending operations,
+   * callbacks or credentials into a seed.
+   */
+  initialData?: InboxInitialData<TData>;
   /** Colour theme of every part under the provider. Default: `'dark'`. */
   theme?: InboxTheme;
 

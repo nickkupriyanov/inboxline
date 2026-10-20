@@ -93,7 +93,10 @@ export function InboxSurface({
     PageError,
   } = useInboxComponents();
   const view = snapshot.view;
-  const loadingFirstPage = view.list.loading && view.list.items.length === 0;
+  // An idle list has simply not started yet — on a server render that is the
+  // first paint — so it is shown as loading rather than as an empty inbox.
+  const loadingFirstPage =
+    (view.list.loading || view.list.status === 'idle') && view.list.items.length === 0;
   const headingId = useId();
   const panel = layout === 'popover';
 
