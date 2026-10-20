@@ -81,7 +81,6 @@ if (changesetConfig.baseBranch !== 'main') fail('changesets baseBranch must be m
 const changesetFiles = (await readdir(join(root, '.changeset'))).filter(
   (file) => file.endsWith('.md') && file !== 'README.md',
 );
-if (changesetFiles.length === 0) fail('.changeset has no pending changesets');
 for (const file of changesetFiles) {
   const text = await read(`.changeset/${file}`);
   const head = /^---\n([\s\S]*?)\n---/.exec(text);
@@ -106,16 +105,19 @@ for (const file of changesetFiles) {
 const workflows = (await readdir(join(root, '.github/workflows'))).filter((file) =>
   file.endsWith('.yml'),
 );
-for (const required of ['ci.yml', 'version-packages.yml', 'release-candidate.yml']) {
+for (const required of ['ci.yml', 'version-packages.yml', 'release-candidate.yml', 'pages.yml']) {
   if (!workflows.includes(required)) fail(`missing workflow .github/workflows/${required}`);
 }
 for (const file of workflows) {
   const text = await read(`.github/workflows/${file}`);
-  if (/changeset publish|npm publish|pnpm release\b/.test(text)) {
-    fail(`.github/workflows/${file}: publishing must not be automated`);
+  if (
+    file !== 'version-packages.yml' &&
+    /changeset publish|npm publish|pnpm release\b/.test(text)
+  ) {
+    fail(`.github/workflows/${file}: publishing belongs only in version-packages.yml`);
   }
-  if (/NPM_TOKEN|NODE_AUTH_TOKEN/.test(text)) {
-    fail(`.github/workflows/${file}: a publish token belongs outside the repo workflows`);
+  if (file !== 'version-packages.yml' && /NPM_TOKEN|NODE_AUTH_TOKEN/.test(text)) {
+    fail(`.github/workflows/${file}: only the release workflow may reference a publish token`);
   }
 }
 const ci = await read('.github/workflows/ci.yml');
@@ -138,6 +140,22 @@ if (!versionWorkflow.includes('version-script')) {
   fail('version-packages.yml does not set version-script');
 }
 
+for (const input of ['publish-script', 'create-github-releases', 'push-git-tags']) {
+  const line = versionWorkflow.split('\n').find((line) => line.trim().startsWith(`${input}:`));
+  if (!line?.includes("vars.NPM_PUBLISH_ENABLED == 'true'")) {
+    fail(`version-packages.yml must gate ${input} on NPM_PUBLISH_ENABLED`);
+  }
+}
+const workspaceManifest = await readJson('package.json');
+if (workspaceManifest.scripts?.release !== 'pnpm build && changeset publish') {
+  fail('release must build packages before changeset publish');
+}
+for (const [label, manifest] of Object.entries(manifests)) {
+  if (changesetFiles.length === 0 && manifest.version === '0.0.0') {
+    fail(`${label}: refusing an unversioned release without changesets`);
+  }
+}
+
 const releaseDoc = await read('docs/release.md');
 if (!/explicit/i.test(releaseDoc) || !/publish/i.test(releaseDoc)) {
   fail('docs/release.md must document the explicit publish procedure');
@@ -153,5 +171,5 @@ if (failures.length > 0) {
 
 console.log(
   `✓ release readiness: ${PUBLIC.length} packages, ${changesetFiles.length} changesets, ` +
-    `${workflows.length} workflows, no automated publish`,
+    `${workflows.length} workflows, npm publish requires explicit opt-in`,
 );

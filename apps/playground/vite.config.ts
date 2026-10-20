@@ -5,6 +5,8 @@ import { defineConfig } from 'vite';
 const source = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 export default defineConfig({
+  // Pages sets /inboxline/; local dev and browser checks keep the root path.
+  base: process.env.PAGES_BASE ?? '/',
   plugins: [react()],
   resolve: {
     alias: [

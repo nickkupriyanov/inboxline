@@ -1783,6 +1783,53 @@ Actions по-прежнему проверяются только локальн
 на пошаговый план, первым шагом которого было завершение текущих исправлений.
 Подготовка публикации остаётся отдельной итерацией после паузы.
 
+### Iteration 26 — Подготовка GitHub Pages и npm · ✅ готово
+
+**Цель:** подготовить публикацию по образцу Soundline, не выполняя push,
+деплой или npm publish в рамках этой итерации.
+
+- [x] Pages workflow: playground и галерея в корне, Storybook в `/storybook/`.
+- [x] Vite base из `PAGES_BASE`, локальный dev остаётся на `/`.
+- [x] Changesets: version PR и выпуск npm/тегов/GitHub Release после явного
+      включения repository variable `NPM_PUBLISH_ENABLED=true`.
+- [x] Release check допускает отсутствие changesets после version PR и
+      проверяет ограничение публикации отдельным workflow и opt-in.
+- [x] Актуальная инструкция настройки GitHub, Pages, npm и первого выпуска.
+- [x] Обязательные проверки и локальная проверка статического сайта с подпутём.
+
+**Границы:** пакеты остаются `0.0.0`, changesets не потребляются; репозиторий,
+remote и секреты не создаются. UI и публичный API не меняются, changeset не нужен.
+
+**Реализовано:** Pages workflow повторяет схему Soundline: playground/галерея
+и Storybook собираются в один artifact. `PAGES_BASE` задаёт путь Vite.
+Version workflow ограничен `main`, команда `release` собирает оба пакета перед
+Changesets publish. Публикация, теги и GitHub releases выключены до явного
+`NPM_PUBLISH_ENABLED=true`; настройка и последствия merge описаны в runbook.
+Release-check принимает версионированное дерево без changesets и отвергает
+`0.0.0` без них. Публичный API и содержимое пакетов не менялись.
+
+**Проверки:** `pnpm typecheck`; `pnpm test` — 432 core + 130 React + 14 HTTP =
+576; `pnpm build`; `pnpm check:docs`; `pnpm check:release` — 22 changesets,
+4 workflow; `PAGES_BASE=/inboxline/ pnpm build:playground`;
+`pnpm build-storybook`; `pnpm format:check`; `git diff --check`.
+Все четыре YAML разобраны с проверкой дублирующихся ключей. На временной копии
+проверены пять сценариев release-check: текущий кандидат, отказ для `0.0.0`
+без changesets, допуск versioned-кандидата без changesets, отказ без opt-in,
+отказ при publish в CI. Chromium загрузил собранные `/inboxline/`,
+`gallery.html`, `/storybook/` и iframe story `layouts-inbox--feed`; ошибок
+same-origin HTTP и необработанных ошибок страницы нет. Артефакты smoke-проверки
+лежат в игнорируемой `.verify/pages/`.
+
+**Ограничения:** первый `pnpm test` в sandbox упал из-за `listen EPERM`;
+повтор с разрешением локального HTTP-порта прошёл. GitHub Actions, Pages,
+npm credentials и реальная публикация ещё не проверены в облаке: remote не
+настроен, push и публикация не выполнялись. Storybook собирается с
+предупреждениями об отсутствии MDX, docgen preview и директивах Motion
+`use client`. Полный cross-browser/SSR/consumer-аудит не повторялся: код
+публикуемых пакетов не менялся; перед выпуском он обязателен по runbook.
+Результат одобрен пользователем командой «Сделай все». Итерация завершена;
+после коммита — пауза. Push, настройка GitHub и публикация требуют отдельной команды.
+
 ## 6. Промежуточные результаты
 
 | После итерации | Что можно проверять                                         |

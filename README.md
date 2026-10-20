@@ -298,7 +298,7 @@ inboxline/
     playground/    layouts, states, gallery and HTTP comparison (not published)
     style-stand/   static visual review (not published)
     ssr-example/   server render, seed and hydration (not published)
-  .github/workflows/  CI, version PR and manual release candidate
+  .github/workflows/  CI, Pages, opt-in npm release and manual release candidate
   tools/
     dev-server/      teaching HTTP server, adapter and tests (private)
     browser-checks/  Playwright regressions (private)

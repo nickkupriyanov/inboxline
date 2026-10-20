@@ -2,7 +2,7 @@
 
 Inboxline is pre-1.0. The packages are versioned with
 [Changesets](https://github.com/changesets/changesets); nothing is published by a
-local commit or by CI in this iteration.
+local commit. The release workflow requires an explicit repository opt-in.
 
 ## What a release means
 
@@ -63,10 +63,12 @@ approval of the previous iteration. A release requires all of:
 5. a separate explicit instruction from the user to publish;
 6. the registry credentials and 2FA of the person publishing, outside the repo.
 
-The likely commands are `changeset publish` (or `pnpm changeset publish`) with the
-appropriate npm authentication. This repository does not configure or store
-credentials and does not run the command automatically. The CI/version-PR side and
-the candidate checklist are in [`release.md`](./release.md).
+The configured command is `pnpm release` (build plus `changeset publish`).
+The Changesets workflow uses it only when repository variable
+`NPM_PUBLISH_ENABLED=true`; credentials come from the GitHub secret `NPM_TOKEN`.
+Merging a version PR with publication enabled triggers npm, tags and GitHub
+releases. Keep it disabled until explicit release approval. The complete setup
+and candidate checklist are in [`release.md`](./release.md).
 
 ## Migration notes so far
 

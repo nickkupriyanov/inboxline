@@ -5,7 +5,7 @@ first domain code exists, plus the contract that each iteration has actually
 implemented. The roadmap ([`../roadmap.md`](../roadmap.md)) owns the sequence of
 work; this file owns the descriptions.
 
-> **Current status: Iteration 24 — documentation.** The v1 surface is
+> **Current status: Iteration 26 — publication setup.** The v1 surface is
 > implemented and verified end to end. The framework-free core owns the
 > notification, context, filter, page, adapter and error contracts, the RFC 3339
 > and calendar helpers, the boundary checks, the reducer, configuration and copy,
@@ -1949,3 +1949,12 @@ applied — for example from a response timestamp or the HTTP `Date` header — 
 document that choice. The client's clock is not acceptable: it can be minutes
 away and would leave the wrong rows unread. The example HTTP server returns the
 boundary explicitly (`through`), and the adapter maps it to `boundary` unchanged.
+
+## Publication infrastructure (Iteration 26)
+
+The playground supports a deployment base through `PAGES_BASE`. Pages combines
+the playground, gallery and Storybook in one static site. Changesets creates
+version PRs; npm publication, tags and GitHub releases require repository variable
+`NPM_PUBLISH_ENABLED=true` and an explicit release approval. Library versions and
+public API remain unchanged in this iteration. See [`release.md`](./release.md)
+for setup, candidate checks and the publish trigger.

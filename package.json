@@ -21,6 +21,7 @@
     "stand": "python3 -m http.server 4174",
     "changeset": "changeset",
     "version-packages": "changeset version",
+    "release": "pnpm build && changeset publish",
     "storybook": "pnpm --filter @nickkupriyanov/inboxline-react storybook",
     "build-storybook": "pnpm --filter @nickkupriyanov/inboxline-react build-storybook",
     "gallery": "pnpm --filter @nickkupriyanov/inboxline-playground exec vite --open /gallery.html",

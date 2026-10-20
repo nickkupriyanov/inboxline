@@ -1,8 +1,8 @@
 # Release candidate and publishing
 
-This is the release runbook for Inboxline. It builds and verifies a candidate;
-it does not publish anything. A publish needs a separate, explicit human
-instruction and registry credentials outside the repository.
+This is the release runbook for Inboxline. Local checks and the candidate
+workflow never publish. The release workflow publishes only after explicit
+human approval and repository opt-in; credentials stay in GitHub Actions secrets.
 
 ## CI
 
@@ -22,18 +22,76 @@ the consumer job only needs Chromium. `pnpm test:browser` starts the playground,
 the SSR example and the teaching HTTP server itself, so CI needs no external
 service.
 
-## Version PR, never a publish
+## Version PR and opt-in publishing
 
 [`.github/workflows/version-packages.yml`](../.github/workflows/version-packages.yml)
-runs `changesets/action` with `version-script` only. It opens or updates a
-“Version Packages” pull request; merging it consumes changesets and updates
-versions/changelogs. It has no `publish-script`, no npm token, no git tag and no
-GitHub release, so it cannot publish by accident.
+uses Changesets, as Soundline does. On pushes to `main` it opens or updates the
+version PR. Without repository variable `NPM_PUBLISH_ENABLED=true`, the action
+has no publish command and creates neither tags nor GitHub releases.
 
-The version PR is created with `GITHUB_TOKEN`; GitHub suppresses CI runs that
-this token triggers. Its diff is version numbers and changelogs only. Run the
-checks locally before merging it, or configure a PAT if the PR should carry its
-own CI.
+After explicit release approval, enabling that variable and providing
+`NPM_TOKEN` allows the action to run `pnpm release` when there are no pending
+changesets: it builds, publishes missing package versions in dependency order,
+pushes tags and creates GitHub releases. **Merging the version PR while opt-in
+is enabled is a publish trigger.** Manual dispatch on `main` can also publish.
+Disable the variable to return to version-only mode. npm publication cannot be
+rolled back by disabling it.
+
+The version PR uses `GITHUB_TOKEN`; GitHub suppresses CI runs triggered by this
+token. Run the candidate checks locally on the version PR before merging it, or
+configure a separate token for PR creation. The release job checks package and
+workflow rules and builds packages; it does not replace the full candidate checks.
+
+## GitHub Pages
+
+[`.github/workflows/pages.yml`](../.github/workflows/pages.yml) builds the
+playground/gallery and Storybook on pushes to `main` or manual dispatch. The
+Pages action supplies `PAGES_BASE` to Vite, so assets work under `/inboxline/`;
+local dev still uses `/`. Storybook is copied into `storybook/` beside the
+playground. The deploy job uses the `github-pages` environment.
+
+For `nickkupriyanov/inboxline`, the resulting addresses are:
+
+- Playground: https://nickkupriyanov.github.io/inboxline/
+- Gallery: https://nickkupriyanov.github.io/inboxline/gallery.html
+- Storybook: https://nickkupriyanov.github.io/inboxline/storybook/
+
+These are intended addresses, not evidence that a deployment has happened.
+Pages hosts the mock examples. The HTTP comparison needs the local teaching
+server at `127.0.0.1:8787`; Pages does not run that server.
+
+## First-time setup (separate authorization required)
+
+1. After approval and commit, create the public GitHub repository
+   `nickkupriyanov/inboxline` without generated README/license/gitignore files.
+2. With explicit push authorization, connect the remote and push `main`.
+   Keep `NPM_PUBLISH_ENABLED` unset: the first push must not publish `0.0.0`.
+3. In **Settings → Actions → General**, allow Actions to create pull requests.
+   Wait for all CI jobs to pass. Version PRs need write/PR permissions.
+4. With explicit site publication authorization, set **Settings → Pages →
+   Source → GitHub Actions** and run **Pages** on `main`. Inspect the three
+   addresses above, including assets and navigation from the gallery.
+5. Review the version PR: package versions, React's core dependency and both
+   changelogs. The first version is determined by the pending changesets; do not
+   describe it as `1.0.0` until that version has been explicitly chosen.
+6. Check out the version PR and run the full candidate commands below. Approve
+   the candidate before merging. No pending changesets after versioning is valid.
+7. For token-based publication as in Soundline, create an npm granular access
+   token with package write access for these packages and the required 2FA bypass
+   for unattended publication. An initial package may need scope-wide permission
+   because it does not exist yet. Store it as **Settings → Secrets and variables
+   → Actions → Secrets → NPM_TOKEN**. Never put the value in source or chat.
+8. Only after explicit npm/tag/GitHub Release approval, set **Actions → Variables
+   → NPM_PUBLISH_ENABLED** to `true`, then merge the reviewed version PR. If it
+   was merged with publication disabled, dispatch **Version packages** on `main`.
+9. Confirm both versions on npm, the tags and GitHub releases, then install the
+   published packages into a scratch React application. A partially failed
+   publish needs inspection of npm and tags before rerunning; published versions
+   are immutable.
+
+References: [GitHub Pages workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages),
+[Changesets action inputs](https://github.com/changesets/action),
+[npm CI authentication](https://docs.npmjs.com/using-private-packages-in-a-ci-cd-workflow/).
 
 ## Manual candidate
 
@@ -104,7 +162,10 @@ rerun the narrow check.
 - `.changeset/config.json` has `commit: false`, public access and `main` as the
   base branch;
 - every pending changeset names a public package and a valid bump;
-- workflows contain no publish command and no npm token;
+- only the version workflow references the npm secret or publish command, and
+  publish/tags/releases all require `NPM_PUBLISH_ENABLED=true`;
+- zero pending changesets is valid after versioning, but unversioned `0.0.0`
+  packages without changesets are rejected;
 - the release documentation exists.
 
 The tarball contents themselves are asserted by `verify:install`: export maps,
@@ -112,26 +173,17 @@ The tarball contents themselves are asserted by `verify:install`: export maps,
 sources/tests. Dev dependencies (Storybook, Vitest, Playwright, Vite) are outside
 the published tarballs.
 
-## Publishing — explicit, not automated
+## Publishing — explicit approval before enabling automation
 
-Do **not** run these as part of a normal iteration. They require a separate
-explicit instruction, a clean reviewed candidate and npm 2FA credentials.
+Use the first-time setup above. `pnpm release` means `pnpm build && changeset
+publish`; it is a real publish command, not a dry run. Do not run it during an
+ordinary iteration. The version workflow provides npm authentication via
+`NODE_AUTH_TOKEN` and requests provenance with `NPM_CONFIG_PROVENANCE=true`.
+No credential value is stored in this repository.
 
-1. Confirm the reviewed commit is the candidate and the working tree is clean.
-2. Run every command in “The same candidate locally” on that commit.
-3. Run `pnpm changeset status` and review every pending note.
-4. On the release branch, run `pnpm version-packages` (local changes only) and
-   review the version/changelog diff; commit it with the release approval.
-5. Run `pnpm verify:install` again against the versioned tarballs.
-6. Publish with the npm CLI from a machine holding the maintainer credentials:
-   `pnpm -r publish --access public` (core before React), or the approved
-   Changesets equivalent. Publishing is never done by CI or by this repository's
-   scripts.
-7. Create the git tag/GitHub release only when explicitly asked; the version PR
-   workflow deliberately creates neither.
-
-Nothing in this repository stores an npm token. `release-candidate.yml` proves a
-candidate without credentials and uploads the artifacts for inspection.
+The manual candidate workflow remains read-only and never publishes, tags or
+creates a GitHub release. Approving a local commit does not authorize enabling
+publication, pushing to GitHub or deploying Pages.
 
 ## Candidate report — 20 October 2026
 

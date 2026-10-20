@@ -1,0 +1,82 @@
+name: Pages
+
+# The public site: the playground at the root of the project page and the
+# Storybook under `/storybook/`. Both are built from the working tree, so the
+# demo always shows what `main` looks like.
+#
+# One-time setup in the repository settings: Pages → Source: "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Also resolves `base_path` (/inboxline), so the subpath is not hardcoded.
+      # `enablement` only works with a token other than GITHUB_TOKEN; Pages is
+      # set to "GitHub Actions" in the repository settings, so it is a no-op here.
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v6
+        with:
+          enablement: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the packages
+        run: pnpm build
+
+      # The project page lives at /inboxline/, so the playground's assets must
+      # be requested from there. Locally the base stays `/`.
+      - name: Build the playground for the project page subpath
+        env:
+          PAGES_BASE: ${{ steps.pages.outputs.base_path }}/
+        run: pnpm --filter @nickkupriyanov/inboxline-playground build
+
+      # Storybook emits relative asset URLs (./assets/…), so it needs no base.
+      - name: Build Storybook
+        run: pnpm build-storybook
+
+      - name: Assemble the site
+        run: |
+          mkdir -p site/storybook
+          cp -r apps/playground/dist/. site/
+          cp -r packages/react/storybook-static/. site/storybook/
+          touch site/.nojekyll
+          find site -maxdepth 1
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
