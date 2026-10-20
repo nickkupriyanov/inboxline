@@ -6,7 +6,8 @@
       "@nickkupriyanov/inboxline-react/motion": ["../../packages/react/src/motion.tsx"],
       "@nickkupriyanov/inboxline-react": ["../../packages/react/src/index.ts"],
       "@nickkupriyanov/inboxline-core/dom": ["../../packages/core/src/dom/index.ts"],
-      "@nickkupriyanov/inboxline-core": ["../../packages/core/src/index.ts"]
+      "@nickkupriyanov/inboxline-core": ["../../packages/core/src/index.ts"],
+      "@inboxline/example-server": ["../../tools/dev-server/adapter.ts"]
     }
   },
   "include": ["src", "vite.config.ts"]

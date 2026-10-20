@@ -38,7 +38,10 @@ async function renderPage(request, response) {
 
     const page = html
       .replace('<!--ssr-outlet-->', appHtml)
-      .replace('<!--ssr-data-->', `<script>window.__INBOX_PRELOAD__ = ${serialiseSeed(seed)}</script>`);
+      .replace(
+        '<!--ssr-data-->',
+        `<script>window.__INBOX_PRELOAD__ = ${serialiseSeed(seed)}</script>`,
+      );
 
     response.statusCode = 200;
     response.setHeader('content-type', 'text/html; charset=utf-8');

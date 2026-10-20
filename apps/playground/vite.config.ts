@@ -34,6 +34,11 @@ export default defineConfig({
         find: '@nickkupriyanov/inboxline-core',
         replacement: source('../../packages/core/src/index.ts'),
       },
+      // The client of the teaching server, shared with the HTTP tests.
+      {
+        find: '@inboxline/example-server',
+        replacement: source('../../tools/dev-server/adapter.ts'),
+      },
     ],
   },
   server: {

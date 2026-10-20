@@ -91,6 +91,9 @@ pnpm build         # build both packages with tsup
 pnpm build:playground  # build the Vite example with both ready-made layouts
 pnpm dev           # run the playground on http://localhost:5173
 pnpm gallery       # open the fixed state gallery at /gallery.html
+pnpm dev-server    # run the teaching HTTP server on http://127.0.0.1:8787
+pnpm demo:http     # the teaching server and the playground together
+pnpm test:server   # HTTP contract and controller-over-HTTP tests
 pnpm storybook     # run Storybook on http://localhost:6006
 pnpm build-storybook  # build the static Storybook
 pnpm ssr           # run the SSR/hydration example on http://localhost:4175
@@ -116,14 +119,18 @@ inboxline/
     specification.md
     visual-reference.md
   apps/
-    playground/    bell, feed, headless and customization sections, plus the
-                   fixed state gallery at gallery.html (not published)
+    playground/    bell, feed, headless, customization and HTTP sections, plus
+                   the fixed state gallery at gallery.html (not published)
     style-stand/   static page for visual review (not published)
     ssr-example/   server render, serialisable seed and hydration (not published)
+  tools/
+    dev-server/    teaching HTTP server, payload-translating adapter and tests
+                   (private, not published)
 ```
 
-`tools/` and CI arrive in the iterations listed in the roadmap. Storybook and the
-stories are development tooling: the published packages contain `dist` only.
+CI arrives in the iteration listed in the roadmap. Storybook, the stories and
+`tools/dev-server` are development tooling: the published packages contain
+`dist` only.
 
 ## License
 

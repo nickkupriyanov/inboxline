@@ -14,7 +14,8 @@
  *
  * Iteration 20 adds a workspace switch, a locale/container section and the link
  * to the fixed state gallery (`gallery.html`), where every server and optimistic
- * state is rendered with deterministic data and time.
+ * state is rendered with deterministic data and time. Iteration 21 adds the
+ * mock-versus-HTTP comparison backed by `tools/dev-server`.
  */
 import { useState } from 'react';
 import {
@@ -24,6 +25,7 @@ import {
   type InboxNotification,
 } from '@nickkupriyanov/inboxline-core';
 import { InboxProvider as MotionInboxProvider } from '@nickkupriyanov/inboxline-react/motion';
+import { HttpSection } from './HttpComparison';
 import {
   Inbox,
   InboxProvider,
@@ -326,7 +328,7 @@ export function App() {
     <main className={`pg-page pg-page-${theme}`}>
       <header className="pg-header">
         <div>
-          <p className="pg-eyebrow">Iteration 20 · gallery and Storybook</p>
+          <p className="pg-eyebrow">Iteration 21 · HTTP adapters and gallery</p>
           <h1>Inboxline layouts</h1>
           <p className="pg-lead">
             The bell opens a non-modal panel placed against its trigger, portalled out of the page
@@ -334,8 +336,9 @@ export function App() {
             closing it leaves the provider running. The feed remains available as a standalone
             layout, both can be restyled or partially replaced without touching the controller, and
             the optional Motion kit changes how the same surface moves. Every loading, empty, error,
-            pending and unknown state is collected in the fixed gallery, and the same widgets are
-            available story by story in Storybook.
+            pending and unknown state is collected in the fixed gallery, the same widgets are
+            available story by story in Storybook, and the section below compares the mock adapter
+            with a real HTTP adapter backed by the teaching server.
           </p>
         </div>
         <div className="pg-header-actions">
@@ -378,6 +381,8 @@ export function App() {
           </button>
         </div>
       </section>
+
+      <HttpSection theme={theme} />
 
       <section className="pg-section">
         <h2>Two independent providers</h2>

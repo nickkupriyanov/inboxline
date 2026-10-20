@@ -772,6 +772,69 @@ Loads cannot apply a change or have an unknown outcome, and a rejected mutation
 cannot be applied first; both combinations throw `RangeError` when they are
 queued.
 
+### The HTTP example and adapter translation
+
+**Implemented in Iteration 21** (`tools/dev-server/` and
+`apps/playground/src/HttpComparison.tsx`). The example is a teaching aid, not a
+notification backend. It has no authentication, recipient model, delivery,
+persistence or rate limiting; restarting it resets the in-memory workspaces. A
+real integration keeps those responsibilities on its server and exposes only the
+four adapter operations to the browser.
+
+The server (`node tools/dev-server/server.mjs --port 8787`) answers:
+
+| Route                                                  | Meaning                                                 |
+| ------------------------------------------------------ | ------------------------------------------------------- |
+| `GET /api/notifications?workspace&filter&cursor&limit` | One page of `rows` plus an opaque `cursor`.             |
+| `GET /api/unread-count?workspace`                      | Unread counter of the whole workspace.                  |
+| `PATCH /api/notifications/:id?workspace`               | Body `{ read }`; returns the row and the new counter.   |
+| `POST /api/notifications/read-all?workspace`           | Marks the workspace read; returns `{ through, count }`. |
+| `POST /api/demo/notifications?workspace`               | Adds a row as “another client”.                         |
+| `GET /api/health`                                      | Whether the demo server is running.                     |
+
+`context.key` is sent as `workspace`. The server payload is deliberately not the
+core contract, so `tools/dev-server/adapter.ts` has something real to translate:
+
+| Server                               | Core                               |
+| ------------------------------------ | ---------------------------------- |
+| `rows` / `cursor`                    | `items` / `nextCursor`             |
+| `notificationId` / `headline`        | `id` / `title`                     |
+| `message` / `occurredAt` / `isRead`  | `body` / `createdAt` / `read`      |
+| `actor.displayName` / `actor.avatar` | `author.name` / `author.avatarUrl` |
+| `payload`                            | `data` (`TData`)                   |
+| `count`                              | `unreadCount`                      |
+| `through`                            | `boundary`                         |
+| `{ error: { code, message } }`       | `InboxError`                       |
+
+The adapter maps an HTTP refusal to an `InboxError` with the matching phase and
+the `rejected` outcome; a network failure is left as the fetch `TypeError`, which
+is what makes a mutation an unknown outcome. The `AbortSignal` of a load is
+passed to `fetch`; an abort stays an `AbortError` and is not reported as a
+server failure. The adapter deliberately has no `subscribe`: the example server
+has no push transport, and an application owns that channel.
+
+Two behaviours make the example useful for review:
+
+- **A workspace-wide bulk.** `read-all` takes its boundary from the server clock
+  and marks every row with `occurredAt <= boundary`, including rows this client
+  never loaded. The returned counter is not assumed to be zero, and a row added
+  after the boundary stays unread.
+- **A lost answer.** The `x-inbox-scenario` header can commit a mutation and then
+  drop the socket. The client cannot tell whether the change happened; the core
+  records an unknown outcome and reconciles with a refresh instead of retrying.
+  The full set is `load-refused`, `page-refused`, `count-refused`,
+  `read-refused`, `read-lost`, `bulk-refused` and `bulk-lost` (plus `normal`).
+  The adapter sends the header only for the operation the scenario belongs to,
+  so a lost read still reconciles through a normal list request.
+
+The playground compares one feed over the mock adapter and one over the HTTP
+adapter in the section “Mock and HTTP adapters”, with a scenario selector and
+buttons for refresh, reconcile and adding a remote event. `pnpm demo:http` starts
+the server and the playground together; `pnpm dev-server` starts only the server,
+and the mock part of the playground keeps working without it. The package
+`tools/dev-server` is private and is not published; `pnpm test:server` runs its
+contract and controller-over-HTTP tests.
+
 ### The error contract
 
 | Code                         | Means                                                                                  |
@@ -1334,9 +1397,10 @@ section renders the feed through the optional `/motion` provider, so the spring
 kit can be compared with the CSS default in the same page. It imports the
 published stylesheet path through a source alias. Iteration 20 adds a workspace
 switch, a locale/container section (Russian at 320 px, English at 800 px) and a
-link to the fixed gallery. It is started with `pnpm dev` and built with
-`pnpm build:playground`; it is not a published package. `pnpm gallery` opens the
-gallery directly.
+link to the fixed gallery. Iteration 21 adds the mock-versus-HTTP comparison
+described in section 3. It is started with `pnpm dev` (or `pnpm demo:http` with
+the teaching server) and built with `pnpm build:playground`; it is not a
+published package. `pnpm gallery` opens the gallery directly.
 
 ### Storybook
 

@@ -1,0 +1,20 @@
+{
+  "name": "@nickkupriyanov/inboxline-dev-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The teaching HTTP server and adapter for the Inboxline examples; not a notification backend",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs --port 8787",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@nickkupriyanov/inboxline-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.4"
+  }
+}

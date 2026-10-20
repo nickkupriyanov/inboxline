@@ -310,3 +310,53 @@ h3 {
 .pg-link:hover {
   color: #ff215a;
 }
+
+.pg-http-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+.pg-http-column {
+  display: grid;
+  /* The implicit column would size to the feed's 800 px; the track has to be
+     bounded by the page column so the root's max-width can do its job. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.pg-http-column h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.pg-http-toolbar {
+  align-items: flex-end;
+}
+
+.pg-field {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.pg-field select {
+  padding: 7px 10px;
+  color: inherit;
+  font: inherit;
+  background: #1b1b21;
+  border: 1px solid #30303a;
+  border-radius: 12px;
+}
+
+.pg-page-light .pg-field select {
+  background: #fff;
+  border-color: #d6d6dd;
+}
+
+.pg-http-controls {
+  display: grid;
+  gap: 6px;
+}
