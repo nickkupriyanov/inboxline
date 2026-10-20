@@ -17,3 +17,8 @@ coverage/
 
 # pnpm store kept inside the workspace
 .pnpm-store/
+
+# Playwright browsers and reports (installed inside the workspace)
+.playwright-browsers/
+playwright-report/
+test-results/

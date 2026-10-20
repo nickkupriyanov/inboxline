@@ -1634,12 +1634,59 @@ rules cannot repaint the inbox's own controls and distort these measurements.
 Boundaries of the automated checks: jsdom has no layout or paint, so axe runs without
 `color-contrast` there and the colour evidence is the token calculation plus the browser
 measurement; axe does not check non-text contrast at all, so icons and rings are
-calculated rather than axe-approved. The browser pass covers one Chromium; Firefox,
-WebKit and repeatable visual regressions are Iteration 22. Zoom is emulated by reducing
-the layout viewport, not by driving the browser's own zoom UI. If both ready-made
+calculated rather than axe-approved. The browser pass now spans Chromium, Firefox and
+WebKit (section 6.2). Zoom is still emulated by reducing the layout viewport, not by
+driving the browser's own zoom UI. If both ready-made
 compositions are mounted under one provider, each keeps its own polite live region, so
 the counter may be announced twice; one composition per provider is recommended for
 announcement purposes while the state stays shared.
+
+### Browser regressions
+
+**Implemented in Iteration 22** (`tools/browser-checks/`). The suite uses Playwright
+1.64 with Chromium, Firefox and WebKit; 22 tests run per engine (66 in total). It
+starts the playground, the SSR example and the teaching HTTP server itself and drives
+the same pages a person would open:
+
+- **Layout.** The feed is measured inside containers of 320, 360, 400 and 800 px, not
+  by resizing the window. Nothing may overflow horizontally; the document itself is
+  checked at 320/360/400/640 px. Both explicit themes must render and differ; long
+  content and the broken-avatar case must wrap without overflow; the many gallery
+  instances keep their own widths.
+- **Portal.** The popover is opened, the trigger is scrolled into view, the panel is
+  checked inside the viewport after a page scroll and after a 320 px resize, its width
+  is capped at 304 px, and closing removes it. The “200% zoom” case emulates the
+  640 CSS px layout viewport a 1280 px window gets at 200%; browser-level zoom is not
+  scriptable across all three engines.
+- **States.** Loading, empty, first-page and next-page errors, pending and unknown
+  reads, a refused bulk, an external update, a 128-unread counter and an adapter
+  without `subscribe` are each opened from the gallery. Retry, “Show updates” and the
+  scroll-into-view / focus behaviour are real interactions.
+- **Real scenarios.** Unread filter → read → focus hand-off → bulk is driven through
+  the visible buttons; a workspace switch reloads the other context; an invalidation
+  raises the counter and the updates banner; the HTTP comparison refreshes the same
+  feed from the teaching server.
+- **SSR and motion.** The raw SSR response is checked for the seeded rows and the
+  embedded `InboxInitialData`; the page is then hydrated in each engine and must stay
+  interactive with no hydration warning. Under `prefers-reduced-motion: reduce`, the
+  row animation is at most 1 ms and closing the panel removes it immediately.
+- **Screenshots.** The visual test writes full-page gallery and playground captures to
+  the ignored `.screenshots/browser-*` directory, one set per engine. These are
+  evidence for review, not image-diff baselines: font rendering differs per engine,
+  and a tolerant diff would hide the overflow bugs the layout tests catch.
+
+Commands: `pnpm install:browsers` (downloads the three Playwright builds inside
+`.playwright-browsers/`, ignored by git) and `pnpm test:browser`. Firefox is launched
+with `MOZ_DISABLE_CONTENT_SANDBOX=1` in this environment: its content process crashes
+under the macOS file sandbox that constrains the test runner. That is a harness
+workaround, not a product setting; the pages themselves are not given extra privileges.
+
+Known boundaries: WebKit is Playwright's build, not the Safari application, and system
+browser settings, extensions and the real zoom UI are out of scope; there is no
+screenshot baseline in this iteration; the suite exercises the dev servers rather than
+the published tarballs (Iteration 23); and HTTP server state is a demo shared by the
+tests, so the HTTP scenario is exercised for refresh, not for destructive multi-test
+sequences. Chromium, Firefox and WebKit each pass all 22 tests in the recorded run.
 
 ## 7. Toolchain decisions
 

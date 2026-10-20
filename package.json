@@ -26,7 +26,9 @@
     "gallery": "pnpm --filter @nickkupriyanov/inboxline-playground exec vite --open /gallery.html",
     "dev-server": "node tools/dev-server/server.mjs --port 8787",
     "demo:http": "node tools/dev-server/dev.mjs",
-    "test:server": "pnpm --filter @nickkupriyanov/inboxline-dev-server test"
+    "test:server": "pnpm --filter @nickkupriyanov/inboxline-dev-server test",
+    "test:browser": "pnpm --filter @nickkupriyanov/inboxline-browser-checks test:browser",
+    "install:browsers": "pnpm --filter @nickkupriyanov/inboxline-browser-checks install:browsers"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",

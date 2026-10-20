@@ -1,0 +1,17 @@
+{
+  "name": "@nickkupriyanov/inboxline-browser-checks",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cross-browser regression checks for Inboxline: layout, containers, states, SSR and reduced motion",
+  "type": "module",
+  "scripts": {
+    "test:browser": "MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_SANDBOX=1 playwright test",
+    "install:browsers": "node scripts/install.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
+    "typescript": "^5.9.3"
+  }
+}

@@ -94,6 +94,8 @@ pnpm gallery       # open the fixed state gallery at /gallery.html
 pnpm dev-server    # run the teaching HTTP server on http://127.0.0.1:8787
 pnpm demo:http     # the teaching server and the playground together
 pnpm test:server   # HTTP contract and controller-over-HTTP tests
+pnpm install:browsers  # Playwright Chromium, Firefox and WebKit inside the workspace
+pnpm test:browser  # cross-browser layout, states, SSR and reduced-motion checks
 pnpm storybook     # run Storybook on http://localhost:6006
 pnpm build-storybook  # build the static Storybook
 pnpm ssr           # run the SSR/hydration example on http://localhost:4175
@@ -124,8 +126,9 @@ inboxline/
     style-stand/   static page for visual review (not published)
     ssr-example/   server render, serialisable seed and hydration (not published)
   tools/
-    dev-server/    teaching HTTP server, payload-translating adapter and tests
-                   (private, not published)
+    dev-server/      teaching HTTP server, payload-translating adapter and tests
+                     (private, not published)
+    browser-checks/  Playwright Chromium/Firefox/WebKit regressions (private)
 ```
 
 CI arrives in the iteration listed in the roadmap. Storybook, the stories and
