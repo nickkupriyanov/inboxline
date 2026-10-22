@@ -95,6 +95,18 @@ jobs:
       - name: Layout, states, SSR and reduced motion
         run: pnpm test:browser
 
+      # Geometry failures are hard to diagnose from a stack trace alone: keep
+      # the screenshots, traces and error contexts for the failing engine.
+      - name: Upload browser failures
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: browser-failures
+          path: |
+            tools/browser-checks/test-results
+            tools/browser-checks/playwright-report
+          retention-days: 7
+
   consumers:
     name: Packed consumers
     runs-on: ubuntu-latest
