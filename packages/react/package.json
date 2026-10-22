@@ -1,6 +1,6 @@
 {
   "name": "@nickkupriyanov/inboxline-react",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Themable, accessible React notification inbox: bell popover and feed layouts, a shared unread counter, cursor pagination and optimistic read state on top of @nickkupriyanov/inboxline-core.",
   "keywords": [
     "react",
