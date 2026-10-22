@@ -15,7 +15,9 @@ import { readFile, stat } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-process.env.PLAYWRIGHT_BROWSERS_PATH = fileURLToPath(
+// Local runs use the workspace copy; CI's Playwright container exports
+// `/ms-playwright` and must keep it.
+process.env.PLAYWRIGHT_BROWSERS_PATH ??= fileURLToPath(
   new URL('../../../.playwright-browsers', import.meta.url),
 );
 
