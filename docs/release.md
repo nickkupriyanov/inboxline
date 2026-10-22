@@ -4,11 +4,13 @@ This is the release runbook for Inboxline. Local checks and the candidate
 workflow never publish. The release workflow publishes only after explicit
 human approval and repository opt-in; credentials stay in GitHub Actions secrets.
 
-The current candidate is **0.1.0**: the 22 accumulated changesets were consumed
-and both changelogs generated. The full candidate passed locally; npm publication
-is waiting for a working npm login. The version workflow still requires
-`NPM_PUBLISH_ENABLED=true` and `NPM_TOKEN`; a local `changeset publish` also
-creates the git tags.
+The first release, **0.1.0**, is published: the 22 accumulated changesets were
+consumed, both changelogs generated, and the release workflow ran with
+`NPM_PUBLISH_ENABLED=true` and `NPM_TOKEN`. npm applied **staged publishing**:
+the tarballs entered the stage queue and the maintainer approved both versions
+with 2FA before they became public. The workflow created the tags and GitHub
+releases. Future releases follow the same two-step flow: CI stages, a maintainer
+approves on npmjs.com under **Staged Packages**.
 
 ## CI
 
@@ -186,6 +188,13 @@ publish`; it is a real publish command, not a dry run. Do not run it during an
 ordinary iteration. The version workflow provides npm authentication via
 `NODE_AUTH_TOKEN` and requests provenance with `NPM_CONFIG_PROVENANCE=true`.
 No credential value is stored in this repository.
+
+npm stages new versions by default. The workflow reporting success means the
+tarballs reached the stage queue; a maintainer must sign in to npmjs.com, open
+**Staged Packages**, review each version and approve it with 2FA. Only then does
+`npm view` resolve the version publicly and the README npm badge update. The git
+tags and GitHub releases are created by the workflow at stage time, so verify
+the registry before announcing a release.
 
 The manual candidate workflow remains read-only and never publishes, tags or
 creates a GitHub release. Approving a local commit does not authorize enabling

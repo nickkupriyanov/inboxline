@@ -18,10 +18,11 @@ It belongs to the same family as
 an explicit light theme, pink accent `#ff215a`, plain CSS variables and a
 framework-free core behind a thin React binding.
 
-> **Status:** the v1 surface is implemented and verified. The docs describe
-> published contracts, and the last local checks are `typecheck`, unit tests,
-> a production build, cross-browser Playwright checks and clean-tarball consumer
-> installs. The plan and iteration history live in [`roadmap.md`](./roadmap.md).
+> **Status:** the v1 surface is implemented and verified, and `0.1.0` is
+> published on npm. The docs describe published contracts, and the last local
+> checks are `typecheck`, unit tests, a production build, cross-browser
+> Playwright checks and clean-tarball consumer installs. The plan and iteration
+> history live in [`roadmap.md`](./roadmap.md).
 
 ## Install
 
