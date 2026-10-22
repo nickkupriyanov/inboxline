@@ -1,4 +1,32 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+/** Let the engine commit two frames, so a hover/focus transition is not measured mid-flight. */
+async function settle(page: Page): Promise<void> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+}
+
+/**
+ * Put the popover trigger near the top of the viewport.
+ *
+ * The panel follows the anchor through a scroll listener, so the scroll itself
+ * must be committed before geometry is read; a fixed timeout is not enough on a
+ * loaded Linux WebKit runner.
+ */
+async function scrollPopoverTriggerIntoView(page: Page): Promise<void> {
+  const trigger = page.locator('[data-il-case="popover-open"] button.il-trigger');
+  const top = await trigger.evaluate(
+    (element) => element.getBoundingClientRect().top + window.scrollY,
+  );
+  const target = Math.max(0, Math.round(top - 120));
+  await page.evaluate((next) => window.scrollTo(0, next), target);
+  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBe(target);
+  await settle(page);
+}
 
 /**
  * Layout, container and portal regressions in a real engine.
@@ -12,6 +40,9 @@ test.describe('layout and containers', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/gallery.html');
     await expect(page.locator('[data-il-case="feed-ready"] .il-root')).toBeVisible();
+    // A late font swap moves every tile below it; measurements taken before the
+    // fallback font is replaced are not the layout the visitor eventually sees.
+    await page.evaluate(() => document.fonts?.ready);
   });
 
   test('the feed follows its container at 320/360/400/800 px', async ({ page }) => {
@@ -99,34 +130,42 @@ test.describe('layout and containers', () => {
   test('the portal stays inside the viewport on scroll and resize', async ({ page }) => {
     // The popover case lives below several feeds and is 1000 px tall, so put its
     // trigger near the top of the viewport instead of centring the whole tile.
-    const trigger = page.locator('[data-il-case="popover-open"] button.il-trigger');
-    const triggerTop = await trigger.evaluate(
-      (element) => element.getBoundingClientRect().top + window.scrollY,
-    );
-    await page.evaluate((top) => window.scrollTo(0, Math.max(0, top - 120)), triggerTop);
+    await scrollPopoverTriggerIntoView(page);
     const panel = page.locator('[role="dialog"]');
     await expect(panel).toBeVisible();
-    await page.waitForTimeout(250);
 
-    const checkInside = async (label: string) => {
-      const box = await panel.boundingBox();
-      const viewport = page.viewportSize();
-      expect(box, label).not.toBeNull();
-      expect(box!.x, label).toBeGreaterThanOrEqual(0);
-      expect(box!.y, label).toBeGreaterThanOrEqual(0);
-      expect(box!.x + box!.width, label).toBeLessThanOrEqual((viewport?.width ?? 0) + 1);
-      expect(box!.y + box!.height, label).toBeLessThanOrEqual((viewport?.height ?? 0) + 1);
+    /** Poll the invariant, not a fixed delay: placement follows scroll and resize. */
+    const checkInside = async (label: string): Promise<void> => {
+      await expect
+        .poll(
+          async () => {
+            const box = await panel.boundingBox();
+            const viewport = page.viewportSize();
+            if (box === null) return 'missing panel';
+            if (box.x < -1) return `left ${box.x}`;
+            if (box.y < -1) return `top ${box.y}`;
+            if (box.x + box.width > (viewport?.width ?? 0) + 1) {
+              return `right ${box.x + box.width}`;
+            }
+            if (box.y + box.height > (viewport?.height ?? 0) + 1) {
+              return `bottom ${box.y + box.height}`;
+            }
+            return 'inside';
+          },
+          { message: label },
+        )
+        .toBe('inside');
     };
 
     await checkInside('initial');
     await page.evaluate(() => window.scrollBy(0, 80));
-    await page.waitForTimeout(250);
+    await settle(page);
     await checkInside('after scroll');
 
     await page.setViewportSize({ width: 320, height: 700 });
-    await page.waitForTimeout(200);
-    const box = await panel.boundingBox();
-    expect(box?.width ?? 0).toBeLessThanOrEqual(304);
+    await expect
+      .poll(async () => Math.round((await panel.boundingBox())?.width ?? 0))
+      .toBeLessThanOrEqual(304);
     await checkInside('after resize to 320');
 
     await page.getByRole('button', { name: 'Close notifications' }).click();
@@ -134,19 +173,20 @@ test.describe('layout and containers', () => {
   });
 
   test('the close action stays on the heading row at 400 and 320 px', async ({ page }) => {
-    const trigger = page.locator('[data-il-case="popover-open"] button.il-trigger');
-    const triggerTop = await trigger.evaluate(
-      (element) => element.getBoundingClientRect().top + window.scrollY,
-    );
-    await page.evaluate((top) => window.scrollTo(0, Math.max(0, top - 120)), triggerTop);
+    await scrollPopoverTriggerIntoView(page);
     const panel = page.locator('[role="dialog"]');
     await expect(panel).toBeVisible();
-    await page.waitForTimeout(250);
 
-    const boxes = async () => {
-      const heading = await panel.locator('.il-heading').boundingBox();
-      const close = await panel.locator('.il-panel-close').boundingBox();
-      const filters = await panel.locator('.il-filters').boundingBox();
+    const boxes = async (): Promise<{
+      heading: NonNullable<Awaited<ReturnType<typeof panel.boundingBox>>>;
+      close: NonNullable<Awaited<ReturnType<typeof panel.boundingBox>>>;
+      filters: NonNullable<Awaited<ReturnType<typeof panel.boundingBox>>>;
+    }> => {
+      const [heading, close, filters] = await Promise.all([
+        panel.locator('.il-heading').boundingBox(),
+        panel.locator('.il-panel-close').boundingBox(),
+        panel.locator('.il-filters').boundingBox(),
+      ]);
       expect(heading).not.toBeNull();
       expect(close).not.toBeNull();
       expect(filters).not.toBeNull();
@@ -155,33 +195,40 @@ test.describe('layout and containers', () => {
 
     // The standard 400 px card has three blocks on one row: the close action is
     // not pushed under the filters by the content-box container query.
-    const standard = await boxes();
-    expect(standard.close.y - standard.heading.y).toBeLessThan(6);
-    expect(standard.close.x).toBeGreaterThan(standard.heading.x);
-    expect(Math.abs(standard.close.y - standard.filters.y)).toBeLessThan(6);
+    await expect
+      .poll(async () => {
+        const standard = await boxes();
+        return (
+          standard.close.y - standard.heading.y < 6 &&
+          standard.close.x > standard.heading.x &&
+          Math.abs(standard.close.y - standard.filters.y) < 6
+        );
+      })
+      .toBe(true);
 
     await page.setViewportSize({ width: 320, height: 700 });
-    await page.waitForTimeout(250);
 
     // At 320 px the heading and close share the first row and the filters take
     // the next one; the close action is still top-right, never on a third line.
-    const narrow = await boxes();
-    expect(narrow.close.y - narrow.heading.y).toBeLessThan(6);
-    expect(narrow.close.x).toBeGreaterThan(narrow.heading.x);
-    expect(narrow.filters.y).toBeGreaterThanOrEqual(narrow.close.y + narrow.close.height - 1);
+    await expect
+      .poll(async () => {
+        const narrow = await boxes();
+        return (
+          narrow.close.y - narrow.heading.y < 6 &&
+          narrow.close.x > narrow.heading.x &&
+          narrow.filters.y >= narrow.close.y + narrow.close.height - 1
+        );
+      })
+      .toBe(true);
   });
 
   test('the panel follows the consumer --il-width-panel token and caps it to the viewport', async ({
     page,
   }) => {
     const trigger = page.locator('[data-il-case="popover-open"] button.il-trigger');
-    const triggerTop = await trigger.evaluate(
-      (element) => element.getBoundingClientRect().top + window.scrollY,
-    );
-    await page.evaluate((top) => window.scrollTo(0, Math.max(0, top - 120)), triggerTop);
+    await scrollPopoverTriggerIntoView(page);
     const panel = page.locator('[role="dialog"]');
     await expect(panel).toBeVisible();
-    await page.waitForTimeout(250);
 
     const panelWidth = async (): Promise<number> =>
       Math.round((await panel.boundingBox())?.width ?? 0);
@@ -197,20 +244,23 @@ test.describe('layout and containers', () => {
       await expect(panel).toHaveCount(0);
       await trigger.click();
       await expect(panel).toBeVisible();
-      await page.waitForTimeout(250);
+      await settle(page);
     };
 
     await reopenWithWidth('520px');
-    expect(await panelWidth()).toBe(520);
+    await expect.poll(panelWidth).toBe(520);
 
     await reopenWithWidth('340px');
-    expect(await panelWidth()).toBe(340);
+    await expect.poll(panelWidth).toBe(340);
 
     await page.setViewportSize({ width: 320, height: 700 });
-    await page.waitForTimeout(250);
-    expect(await panelWidth()).toBeLessThanOrEqual(304);
-    const box = await panel.boundingBox();
-    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(320);
+    await expect.poll(panelWidth).toBeLessThanOrEqual(304);
+    await expect
+      .poll(async () => {
+        const box = await panel.boundingBox();
+        return (box?.x ?? 0) + (box?.width ?? 0);
+      })
+      .toBeLessThanOrEqual(320);
   });
 
   test('a 200% zoom is emulated by halving the CSS viewport', async ({ page }) => {
