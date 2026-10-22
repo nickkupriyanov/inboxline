@@ -3,10 +3,10 @@ import { defineConfig, devices } from '@playwright/test';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
-// Browsers live inside the workspace so the check needs no global cache. The
-// package script exports the same path; setting it here also covers a direct
-// `npx playwright test` from this directory.
-process.env.PLAYWRIGHT_BROWSERS_PATH = fileURLToPath(
+// Locally the browsers live inside the workspace, so the check needs no global
+// cache. CI runs in the official Playwright container, which exports its own
+// `/ms-playwright`; an explicit environment value always wins.
+process.env.PLAYWRIGHT_BROWSERS_PATH ??= fileURLToPath(
   new URL('../../.playwright-browsers', import.meta.url),
 );
 // Firefox 157 crashes its content process under the macOS file sandbox used by

@@ -72,6 +72,14 @@ jobs:
     name: Cross-browser checks
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The official image ships the matching Chromium, Firefox and WebKit builds
+    # with every system dependency. Downloading and apt-installing them on each
+    # run was the slowest, flakiest part of CI and hung repeatedly.
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --user 1001
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     steps:
       - uses: actions/checkout@v7
 
@@ -84,12 +92,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      # The browsers live in the workspace, matching the config the suite reads.
-      - name: Install Playwright browsers and system dependencies
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
-        run: pnpm --filter @nickkupriyanov/inboxline-browser-checks exec playwright install --with-deps chromium firefox webkit
 
       # The suite starts the playground, the SSR example and the teaching server.
       - name: Layout, states, SSR and reduced motion
