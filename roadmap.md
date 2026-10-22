@@ -1889,12 +1889,19 @@ GitHub release. npm-бейдж показывает `v0.1.0`.
 каждой версии на npmjs.com. CI может подготовить stage, но не публикует
 версию без 2FA мейнтейнера; это учтено в release runbook.
 
-**Известное ограничение CI:** финальный прогон
+**Исправление CI:** прогон
 [`39809370884`](https://github.com/nickkupriyanov/inboxline/actions/runs/39809370884)
-остался красным в job `Cross-browser checks`. В двух попытках WebKit упал на
-разных layout-тестах: `close` на 320 px и позиция portal. Локально тот же
-набор проходил 72/72 дважды. Публикации npm это не блокирует, но флейк
-требует отдельной итерации и повторного browser-прогона в CI.
+был красным в `Cross-browser checks`: WebKit падал на `close` при 320 px и на
+позиции portal. Причина — фиксированные `waitForTimeout(250)` после прокрутки
+и resize: на загруженном Linux-раннере окно ещё не успевало применить scroll и
+пересчитать layout. В `layout.spec.ts` добавлены ожидание `document.fonts`,
+проверка фактического `window.scrollY`, двухкадровый settle и `expect.poll` по
+геометрии вместо таймаута. CI теперь сохраняет `test-results` и
+`playwright-report` при падении. Прогон
+[`39816800292`](https://github.com/nickkupriyanov/inboxline/actions/runs/39816800292)
+зелёный: `Workspace checks`, `Cross-browser checks` и `Packed consumers`;
+локально 72/72 в Chromium, Firefox и WebKit. Коммиты: `214a945` — artifacts,
+`123b393` — детерминированные ожидания.
 
 ## 6. Промежуточные результаты
 
