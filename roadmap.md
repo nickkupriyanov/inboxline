@@ -1896,12 +1896,23 @@ GitHub release. npm-бейдж показывает `v0.1.0`.
 и resize: на загруженном Linux-раннере окно ещё не успевало применить scroll и
 пересчитать layout. В `layout.spec.ts` добавлены ожидание `document.fonts`,
 проверка фактического `window.scrollY`, двухкадровый settle и `expect.poll` по
-геометрии вместо таймаута. CI теперь сохраняет `test-results` и
-`playwright-report` при падении. Прогон
-[`39816800292`](https://github.com/nickkupriyanov/inboxline/actions/runs/39816800292)
+геометрии вместо таймаута. CI сохраняет `test-results` и `playwright-report` при
+падении.
+
+Отдельно устранена причина зависаний: `playwright install --with-deps` мог
+висеть на загрузке браузеров и apt до 30-минутного таймаута. `browser` и
+`consumers` теперь работают в официальном образе
+`mcr.microsoft.com/playwright:v1.64.1-noble`, где Chromium, Firefox, WebKit и
+системные библиотеки уже установлены. Конфиг и consumer-check используют
+экспортированный образом `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`, локальный
+запуск по-прежнему берёт `.playwright-browsers`.
+
+Финальный прогон
+[`39826005577`](https://github.com/nickkupriyanov/inboxline/actions/runs/39826005577)
 зелёный: `Workspace checks`, `Cross-browser checks` и `Packed consumers`;
 локально 72/72 в Chromium, Firefox и WebKit. Коммиты: `214a945` — artifacts,
-`123b393` — детерминированные ожидания.
+`123b393` — детерминированные ожидания, `8678970` и `a018697` — контейнеры,
+`34fc188` — путь браузеров в consumer-check.
 
 ## 6. Промежуточные результаты
 
