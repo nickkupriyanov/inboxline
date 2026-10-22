@@ -43,7 +43,8 @@ The mock adapter makes the first render runnable without a backend. Replace it
 with your own adapter (below) when the UI is connected.
 
 ```tsx
-import { Inbox, InboxProvider, createMockAdapter } from '@nickkupriyanov/inboxline-react';
+import { Inbox, InboxProvider } from '@nickkupriyanov/inboxline-react';
+import { createMockAdapter } from '@nickkupriyanov/inboxline-core';
 import '@nickkupriyanov/inboxline-react/styles.css';
 
 const adapter = createMockAdapter({
