@@ -1777,8 +1777,9 @@ build emits them and are evidence, not a budget.
 Boundaries: the check installs from `file:` tarballs and needs network access for
 React, Vite, TypeScript and jsdom; it is not an offline reproducibility test. The
 browser step needs the Playwright Chromium build from `pnpm install:browsers`.
-Versions are still `0.0.0` with Changesets driving the release; nothing is
-published by these commands. CI and release automation remain Iterations 25.
+The first release candidate is `0.1.0`, versioned from the accumulated
+changesets; nothing is published by these commands. CI and release automation
+live in Iterations 25–26.
 
 ## 8. Open questions
 

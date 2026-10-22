@@ -4,6 +4,12 @@ This is the release runbook for Inboxline. Local checks and the candidate
 workflow never publish. The release workflow publishes only after explicit
 human approval and repository opt-in; credentials stay in GitHub Actions secrets.
 
+The current candidate is **0.1.0**: the 22 accumulated changesets were consumed
+and both changelogs generated. The full candidate passed locally; npm publication
+is waiting for a working npm login. The version workflow still requires
+`NPM_PUBLISH_ENABLED=true` and `NPM_TOKEN`; a local `changeset publish` also
+creates the git tags.
+
 ## CI
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every push to
