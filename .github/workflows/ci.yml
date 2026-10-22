@@ -113,6 +113,13 @@ jobs:
     name: Packed consumers
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # Same image as the browser job: Chromium and its system libraries are
+    # already installed, so the hydration leg never waits on a browser download.
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --user 1001
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     steps:
       - uses: actions/checkout@v7
 
@@ -129,10 +136,5 @@ jobs:
       # verify-install builds and packs the libraries, installs React 18, React 19
       # and the motion consumer from the tarballs, and hydrates the default legs in
       # Chromium. Only Chromium is needed for that last step.
-      - name: Install Playwright Chromium
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
-        run: pnpm --filter @nickkupriyanov/inboxline-browser-checks exec playwright install --with-deps chromium
-
       - name: Pack and verify consumers
         run: pnpm verify:install
