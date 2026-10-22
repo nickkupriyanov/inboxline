@@ -1,5 +1,11 @@
 # Inboxline
 
+[![CI](https://github.com/nickkupriyanov/inboxline/actions/workflows/ci.yml/badge.svg)](https://github.com/nickkupriyanov/inboxline/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@nickkupriyanov/inboxline-react?label=npm)](https://www.npmjs.com/package/@nickkupriyanov/inboxline-react)
+[![Live demo](https://img.shields.io/badge/demo-live-ff215a)](https://nickkupriyanov.github.io/inboxline/)
+[![Storybook](https://img.shields.io/badge/storybook-open-ff4785)](https://nickkupriyanov.github.io/inboxline/storybook/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+
 Notification centre for React apps whose backend already creates and stores
 notifications: personal dashboards, CRM, booking apps, workspaces and internal
 tools. Inboxline ships the UI and the behaviour — a shared unread counter,
